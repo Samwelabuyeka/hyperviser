@@ -1,0 +1,25 @@
+[package]
+name = "aurora-gpu"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "GPU compute engine for AURORA"
+
+[dependencies]
+aurora-core = { path = "../aurora-core" }
+
+# GPU bindings (optional, loaded at runtime)
+cuda-driver-sys = { workspace = true, optional = true }
+ash = { workspace = true, optional = true }
+
+# Error handling
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[features]
+default = []
+cuda = ["cuda-driver-sys"]
+vulkan = ["ash"]

@@ -1,0 +1,22 @@
+[package]
+name = "aurora-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Public API for AURORA"
+
+[dependencies]
+aurora-core = { path = "../aurora-core" }
+aurora-profiler = { path = "../aurora-profiler" }
+aurora-cpu = { path = "../aurora-cpu" }
+aurora-orchestrator = { path = "../aurora-orchestrator" }
+
+# Async
+tokio = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "aurora-autotune"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Auto-tuning system for AURORA"
+
+[dependencies]
+aurora-core = { path = "../aurora-core" }
+aurora-profiler = { path = "../aurora-profiler" }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+tracing = { workspace = true }

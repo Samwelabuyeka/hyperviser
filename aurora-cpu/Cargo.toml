@@ -1,0 +1,38 @@
+[package]
+name = "aurora-cpu"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "CPU compute engine with SIMD optimization for AURORA"
+
+[dependencies]
+aurora-core = { path = "../aurora-core" }
+aurora-profiler = { path = "../aurora-profiler" }
+
+# Parallelism
+rayon = { workspace = true }
+crossbeam = { workspace = true }
+parking_lot = { workspace = true }
+
+# SIMD
+wide = { workspace = true }
+
+# Math
+matrixmultiply = { workspace = true }
+
+# System
+libc = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "cpu_kernels"
+harness = false

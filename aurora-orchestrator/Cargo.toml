@@ -1,0 +1,28 @@
+[package]
+name = "aurora-orchestrator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Hybrid execution orchestrator for AURORA"
+
+[dependencies]
+aurora-core = { path = "../aurora-core" }
+aurora-profiler = { path = "../aurora-profiler" }
+aurora-cpu = { path = "../aurora-cpu" }
+
+# Async
+tokio = { workspace = true }
+
+# Concurrency
+crossbeam-channel = { workspace = true }
+parking_lot = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }

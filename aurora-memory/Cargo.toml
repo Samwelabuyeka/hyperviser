@@ -1,0 +1,19 @@
+[package]
+name = "aurora-memory"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Memory management for AURORA"
+
+[dependencies]
+aurora-core = { path = "../aurora-core" }
+
+# System
+libc = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+tracing = { workspace = true }

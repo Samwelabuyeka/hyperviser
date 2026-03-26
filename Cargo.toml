@@ -1,0 +1,83 @@
+[workspace]
+members = [
+    "aurora-core",
+    "aurora-profiler",
+    "aurora-cpu",
+    "aurora-gpu",
+    "aurora-orchestrator",
+    "aurora-tensor",
+    "aurora-memory",
+    "aurora-linux",
+    "aurora-autotune",
+    "aurora-api",
+    "aurora-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0-alpha"
+edition = "2021"
+authors = ["AURORA Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/aurora-runtime/aurora"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Core dependencies
+libc = "0.2"
+numa = "0.2"
+half = "2.3"
+bytemuck = "1.14"
+
+# Async & Runtime
+tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
+rayon = "1.8"
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+
+# GPU Bindings
+cuda-driver-sys = "0.3"
+cuda-runtime-sys = "0.3"
+hip-sys = "0.1"
+ash = "0.37"
+gpu-alloc = "0.6"
+
+# Math & SIMD
+wide = "0.7"
+packed_simd_2 = { version = "0.3", package = "packed_simd" }
+matrixmultiply = "0.3"
+
+# System
+sysinfo = "0.30"
+raw-cpuid = "11.0"
+perf-event = "0.4"
+hwloc = "0.8"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# CLI & Logging
+clap = { version = "4.4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Testing
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.4"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.release-with-debug]
+inherits = "release"
+strip = false
+debug = true
