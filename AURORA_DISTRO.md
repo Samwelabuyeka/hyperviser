@@ -40,9 +40,14 @@ cargo run -p aurora-distro -- init-tree --out distro --distro-name "Aurora Neon"
 This generates:
 
 - `distro/profiles/default.json`
+- `distro/profiles/installer.json`
+- `distro/profiles/performance.json`
 - branding and theme asset folders
 - overlay files for GRUB and Plymouth
 - a default gaming/Kali-style wallpaper and shell theme scaffold
+- installer UX files under `overlay/usr/share/aurora/installer/`
+- first-boot launcher and autostart entries for the installer shell
+- performance profile shell/sysctl files under `overlay/etc/`
 
 ## Inspect Hardware
 
@@ -69,6 +74,13 @@ You can also provide the USB target directly:
 ```bash
 sudo cargo run -p aurora-distro -- build-iso --tree distro --usb-device /dev/sdb
 ```
+
+The build command now also writes:
+
+- `distro/build/system-profile.json`
+- `distro/build/partition-plan.json`
+
+so the remaster output keeps the detected hardware scan and generated partition strategy together.
 
 ## Boot Repair
 

@@ -106,6 +106,30 @@ struct BuildConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct InstallerConfig {
+    wizard_title: String,
+    welcome_headline: String,
+    auto_scan_hardware: bool,
+    offer_inbuilt_usb_writer: bool,
+    support_legacy_bios: bool,
+    support_uefi: bool,
+    ask_user_details_first: bool,
+    fallback_to_scan_when_unknown: bool,
+    default_partition_mode: BootMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PerformanceProfile {
+    name: String,
+    cpu_governor: String,
+    enable_hugepages: bool,
+    enable_gamemode: bool,
+    enable_mangohud: bool,
+    tune_sysctl: bool,
+    kernel_cmdline_additions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SystemScan {
     firmware: BootMode,
     architecture: String,
@@ -168,9 +192,17 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         out.join("overlay"),
         out.join("overlay/etc/skel"),
         out.join("overlay/etc/aurora-installer"),
+        out.join("overlay/etc/profile.d"),
+        out.join("overlay/etc/sysctl.d"),
+        out.join("overlay/usr/local/bin"),
+        out.join("overlay/usr/share/applications"),
+        out.join("overlay/usr/share/aurora/installer"),
+        out.join("overlay/usr/share/themes/Aurora-Neon/gtk-3.0"),
+        out.join("overlay/usr/share/icons/Aurora-Neon"),
         out.join("overlay/usr/share/plymouth/themes/aurora-neon"),
         out.join("overlay/usr/share/grub/themes/aurora"),
         out.join("overlay/usr/share/backgrounds/aurora"),
+        out.join("overlay/home/aurora/.config/autostart"),
         out.join("assets"),
         out.join("assets/branding"),
         out.join("assets/theme"),
@@ -206,10 +238,42 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         accent_color: "#12f7ff".to_string(),
         performance_goal: "Tune for strong CPU throughput on supported hardware; 3x uplift is a target for selective workloads, not a universal guarantee.".to_string(),
     };
+    let installer = InstallerConfig {
+        wizard_title: format!("{} Installer", config.branding_name),
+        welcome_headline: format!("Forge your high-performance {} system", config.branding_name),
+        auto_scan_hardware: true,
+        offer_inbuilt_usb_writer: true,
+        support_legacy_bios: true,
+        support_uefi: true,
+        ask_user_details_first: true,
+        fallback_to_scan_when_unknown: true,
+        default_partition_mode: BootMode::Auto,
+    };
+    let performance = PerformanceProfile {
+        name: "Aurora Maximum Throughput".to_string(),
+        cpu_governor: "performance".to_string(),
+        enable_hugepages: true,
+        enable_gamemode: true,
+        enable_mangohud: true,
+        tune_sysctl: true,
+        kernel_cmdline_additions: vec![
+            "mitigations=off".to_string(),
+            "transparent_hugepage=always".to_string(),
+            "nowatchdog".to_string(),
+        ],
+    };
 
     fs::write(
         out.join("profiles/default.json"),
         serde_json::to_string_pretty(&config)?,
+    )?;
+    fs::write(
+        out.join("profiles/installer.json"),
+        serde_json::to_string_pretty(&installer)?,
+    )?;
+    fs::write(
+        out.join("profiles/performance.json"),
+        serde_json::to_string_pretty(&performance)?,
     )?;
     fs::write(
         out.join("assets/theme/theme.css"),
@@ -224,8 +288,60 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         "The installer can scan firmware/disk details automatically and use aurora-distro plan-partitions output when users skip manual hardware entry.\n",
     )?;
     fs::write(
+        out.join("overlay/etc/aurora-installer/installer.json"),
+        serde_json::to_string_pretty(&installer)?,
+    )?;
+    fs::write(
+        out.join("overlay/etc/aurora-installer/performance-profile.json"),
+        serde_json::to_string_pretty(&performance)?,
+    )?;
+    fs::write(
+        out.join("overlay/etc/profile.d/aurora-performance.sh"),
+        performance_shell_script(&performance),
+    )?;
+    fs::write(
+        out.join("overlay/etc/sysctl.d/99-aurora-gaming.conf"),
+        performance_sysctl_conf(),
+    )?;
+    fs::write(
         out.join("overlay/usr/share/backgrounds/aurora/gaming-kali.svg"),
         default_wallpaper_svg(&config.branding_name, &config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/applications/aurora-installer.desktop"),
+        installer_desktop_file(),
+    )?;
+    fs::write(
+        out.join("overlay/home/aurora/.config/autostart/aurora-installer.desktop"),
+        installer_desktop_file(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-firstboot"),
+        firstboot_script(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/installer/index.html"),
+        installer_html(&config.branding_name, &config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/installer/installer.css"),
+        installer_css(&config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/installer/installer.js"),
+        installer_js(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/themes/Aurora-Neon/index.theme"),
+        gtk_theme_index(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/themes/Aurora-Neon/gtk-3.0/gtk.css"),
+        gtk_theme_css(&config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/icons/Aurora-Neon/index.theme"),
+        icon_theme_index(),
     )?;
     fs::write(
         out.join("overlay/usr/share/grub/themes/aurora/theme.txt"),
@@ -664,6 +780,59 @@ fn default_theme_css(name: &str, accent: &str) -> String {
     format!(
         ":root {{ --aurora-accent: {accent}; --aurora-bg: #08111d; --aurora-panel: #101c2b; }}\nbody {{ background: radial-gradient(circle at top, #14263a, var(--aurora-bg)); color: #eef7ff; font-family: 'Orbitron', sans-serif; }}\n.login-logo {{ display: none; }}\n.session-title::after {{ content: '{name}'; color: var(--aurora-accent); }}\n"
     )
+}
+
+fn installer_desktop_file() -> String {
+    "[Desktop Entry]\nType=Application\nName=AURORA Installer\nExec=/usr/local/bin/aurora-firstboot\nTerminal=false\nX-GNOME-Autostart-enabled=true\nCategories=System;\n".to_string()
+}
+
+fn firstboot_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nif command -v xdg-open >/dev/null 2>&1; then\n  xdg-open /usr/share/aurora/installer/index.html >/dev/null 2>&1 || true\nfi\n".to_string()
+}
+
+fn installer_html(name: &str, accent: &str) -> String {
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{name} Installer</title><link rel=\"stylesheet\" href=\"installer.css\"></head><body><main class=\"shell\"><section class=\"hero\"><p class=\"eyebrow\">Gaming-grade Ubuntu Remaster</p><h1>{name}</h1><p class=\"lede\">A Kali-inspired neon interface for a CPU-first performance distro. If you do not know your system details, the installer can scan and build the partition plan for you.</p><div class=\"cta-row\"><button id=\"scanBtn\">Scan This System</button><button id=\"planBtn\">Create Partition Plan</button><button id=\"usbBtn\">Use Inbuilt USB Writer</button></div></section><section class=\"grid\"><article class=\"card\"><h2>Firmware Support</h2><p>Legacy BIOS, UEFI, or dual-target workflows.</p></article><article class=\"card\"><h2>Desktop Presets</h2><p>GNOME, KDE, or a lean minimal shell generated from the same Rust profile.</p></article><article class=\"card\"><h2>Performance Profile</h2><p>Huge pages, gaming overlay tools, and AURORA tuning hooks are staged into the distro tree.</p></article></section><section class=\"terminal\"><div class=\"terminal-bar\"><span></span><span></span><span></span></div><pre id=\"output\">Awaiting action...</pre></section></main><script>window.AURORA_INSTALLER={{accent:\"{accent}\",name:\"{name}\"}};</script><script src=\"installer.js\"></script></body></html>"
+    )
+}
+
+fn installer_css(accent: &str) -> String {
+    format!(
+        ":root{{--accent:{accent};--bg:#05070d;--panel:#0f1724;--line:#17314d;--text:#edf7ff;--muted:#9db4c8;--warm:#ff6a00}}*{{box-sizing:border-box}}body{{margin:0;font-family:'Orbitron',sans-serif;background:radial-gradient(circle at top,#10233a 0%,#05070d 55%,#020304 100%);color:var(--text)}}.shell{{max-width:1100px;margin:0 auto;padding:40px 24px 72px}}.hero{{padding:48px 36px;border:1px solid var(--line);background:linear-gradient(135deg,rgba(16,31,52,.92),rgba(8,13,20,.96));border-radius:28px;box-shadow:0 20px 80px rgba(0,0,0,.45)}}.eyebrow{{letter-spacing:.22em;text-transform:uppercase;color:var(--accent);font-size:12px}}h1{{font-size:72px;line-height:.95;margin:16px 0}}.lede{{max-width:760px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:24px}}.cta-row{{display:flex;flex-wrap:wrap;gap:16px;margin-top:28px}}button{{border:1px solid var(--line);background:linear-gradient(180deg,#102740,#0a1524);color:var(--text);padding:16px 22px;border-radius:16px;font:inherit;cursor:pointer}}button:hover{{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 24px rgba(18,247,255,.22)}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-top:24px}}.card{{padding:22px;border-radius:22px;background:rgba(11,18,30,.86);border:1px solid var(--line)}}.card h2{{margin:0 0 8px;font-size:24px}}.card p{{margin:0;color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:20px}}.terminal{{margin-top:24px;border-radius:22px;overflow:hidden;border:1px solid var(--line);background:#071019}}.terminal-bar{{display:flex;gap:8px;padding:12px 14px;background:#0c1725}}.terminal-bar span{{width:12px;height:12px;border-radius:50%;background:var(--warm)}}.terminal-bar span:nth-child(2){{background:#ffca28}}.terminal-bar span:nth-child(3){{background:var(--accent)}}pre{{margin:0;padding:22px;color:#d8f7ff;min-height:180px;font-family:'JetBrains Mono',monospace;white-space:pre-wrap}}@media (max-width:720px){{h1{{font-size:48px}}.lede{{font-size:20px}}}}"
+    )
+}
+
+fn installer_js() -> String {
+    "const output=document.getElementById('output');const write=(lines)=>output.textContent=lines.join('\\n');document.getElementById('scanBtn').addEventListener('click',()=>write(['Scanning current machine...','- detect firmware mode','- detect CPU model and RAM','- enumerate storage devices','Result: if details are missing, aurora-distro can fall back to automatic planning.']));document.getElementById('planBtn').addEventListener('click',()=>write(['Generating partition plan...','- legacy BIOS: bios_grub + root + swap','- UEFI: EFI + root + swap','- BOTH: EFI + bios_grub + root + swap','Result: installer chooses the correct layout for the detected firmware.']));document.getElementById('usbBtn').addEventListener('click',()=>write(['Inbuilt USB writer flow','1. Confirm target device','2. Verify path is a block device','3. Write ISO with dd + sync','4. Return success/failure logs to the user']));".to_string()
+}
+
+fn gtk_theme_index() -> String {
+    "[Desktop Entry]\nName=Aurora Neon\nComment=Gaming-inspired dark GTK theme\n".to_string()
+}
+
+fn gtk_theme_css(accent: &str) -> String {
+    format!(
+        "@define-color accent {accent};\n@define-color bg #09111b;\n@define-color panel #111c2b;\n@define-color warm #ff6a00;\nwindow,dialog{{background-image:none;background-color:@bg;color:#eef7ff}}headerbar{{background:linear-gradient(to bottom,#10233a,#0a1524);border-bottom:1px solid shade(@accent,.65)}}button{{background-image:none;background:linear-gradient(to bottom,#10253b,#0c1726);border:1px solid shade(@accent,.6);border-radius:12px;color:#eef7ff}}button:hover{{box-shadow:0 0 10px alpha(@accent,.25)}}entry,spinbutton,textview{{background:#0d1520;border:1px solid #18314d;color:#eef7ff}}"
+    )
+}
+
+fn icon_theme_index() -> String {
+    "[Icon Theme]\nName=Aurora-Neon\nComment=Placeholder icon theme for AURORA gaming distro\nInherits=Adwaita\nDirectories=.\n".to_string()
+}
+
+fn performance_shell_script(profile: &PerformanceProfile) -> String {
+    format!(
+        "#!/usr/bin/env bash\nexport AURORA_PROFILE_NAME=\"{}\"\nexport AURORA_CPU_GOVERNOR=\"{}\"\nexport AURORA_ENABLE_HUGEPAGES=\"{}\"\nexport AURORA_ENABLE_GAMEMODE=\"{}\"\nexport AURORA_ENABLE_MANGOHUD=\"{}\"\n",
+        profile.name,
+        profile.cpu_governor,
+        profile.enable_hugepages,
+        profile.enable_gamemode,
+        profile.enable_mangohud,
+    )
+}
+
+fn performance_sysctl_conf() -> String {
+    "vm.swappiness=10\nvm.dirty_ratio=5\nvm.dirty_background_ratio=2\nkernel.numa_balancing=1\nkernel.sched_autogroup_enabled=0\n".to_string()
 }
 
 fn default_wallpaper_svg(name: &str, accent: &str) -> String {
