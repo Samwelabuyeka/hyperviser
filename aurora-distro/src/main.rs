@@ -116,6 +116,9 @@ struct InstallerConfig {
     ask_user_details_first: bool,
     fallback_to_scan_when_unknown: bool,
     default_partition_mode: BootMode,
+    enable_memory_boost_wizard: bool,
+    enable_boot_repair_tools: bool,
+    performance_mode_label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +129,14 @@ struct PerformanceProfile {
     enable_gamemode: bool,
     enable_mangohud: bool,
     tune_sysctl: bool,
+    enable_zram: bool,
+    zram_fraction_percent: u8,
+    use_tmpfs_for_temp: bool,
+    disable_unneeded_services: bool,
+    enable_preload: bool,
+    io_scheduler: String,
+    swap_partition_policy: String,
+    readahead_kb: u32,
     kernel_cmdline_additions: Vec<String>,
 }
 
@@ -192,8 +203,10 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         out.join("overlay"),
         out.join("overlay/etc/skel"),
         out.join("overlay/etc/aurora-installer"),
+        out.join("overlay/etc/default"),
         out.join("overlay/etc/profile.d"),
         out.join("overlay/etc/sysctl.d"),
+        out.join("overlay/etc/systemd/system"),
         out.join("overlay/usr/local/bin"),
         out.join("overlay/usr/share/applications"),
         out.join("overlay/usr/share/aurora/installer"),
@@ -230,13 +243,18 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
             "htop".to_string(),
             "nvtop".to_string(),
             "git".to_string(),
+            "btop".to_string(),
+            "preload".to_string(),
+            "zram-tools".to_string(),
+            "numactl".to_string(),
+            "linux-tools-generic".to_string(),
         ],
         bios_legacy: true,
         uefi: true,
         kali_like_theme: true,
         theme_name: "Aurora Neon Assault".to_string(),
         accent_color: "#12f7ff".to_string(),
-        performance_goal: "Tune for strong CPU throughput on supported hardware; 3x uplift is a target for selective workloads, not a universal guarantee.".to_string(),
+        performance_goal: "Tune for aggressive boot speed, stronger desktop responsiveness, faster load-time behavior, and strong CPU throughput on supported hardware; 3x uplift is a target for selective workloads, not a universal guarantee.".to_string(),
     };
     let installer = InstallerConfig {
         wizard_title: format!("{} Installer", config.branding_name),
@@ -248,6 +266,9 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         ask_user_details_first: true,
         fallback_to_scan_when_unknown: true,
         default_partition_mode: BootMode::Auto,
+        enable_memory_boost_wizard: true,
+        enable_boot_repair_tools: true,
+        performance_mode_label: "AURORA Warp Mode".to_string(),
     };
     let performance = PerformanceProfile {
         name: "Aurora Maximum Throughput".to_string(),
@@ -256,10 +277,21 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         enable_gamemode: true,
         enable_mangohud: true,
         tune_sysctl: true,
+        enable_zram: true,
+        zram_fraction_percent: 60,
+        use_tmpfs_for_temp: true,
+        disable_unneeded_services: true,
+        enable_preload: true,
+        io_scheduler: "none".to_string(),
+        swap_partition_policy: "hybrid-zram-disk".to_string(),
+        readahead_kb: 4096,
         kernel_cmdline_additions: vec![
             "mitigations=off".to_string(),
             "transparent_hugepage=always".to_string(),
             "nowatchdog".to_string(),
+            "quiet".to_string(),
+            "splash".to_string(),
+            "noatime".to_string(),
         ],
     };
 
@@ -301,7 +333,11 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     )?;
     fs::write(
         out.join("overlay/etc/sysctl.d/99-aurora-gaming.conf"),
-        performance_sysctl_conf(),
+        performance_sysctl_conf(&performance),
+    )?;
+    fs::write(
+        out.join("overlay/etc/default/aurora-performance"),
+        performance_defaults(&performance),
     )?;
     fs::write(
         out.join("overlay/usr/share/backgrounds/aurora/gaming-kali.svg"),
@@ -317,11 +353,23 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     )?;
     fs::write(
         out.join("overlay/usr/local/bin/aurora-firstboot"),
-        firstboot_script(),
+        firstboot_script(&installer),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-autosetup"),
+        autosetup_script(),
+    )?;
+    fs::write(
+        out.join("overlay/etc/systemd/system/aurora-autosetup.service"),
+        autosetup_service(),
+    )?;
+    fs::write(
+        out.join("overlay/etc/systemd/system/aurora-zram-setup.service"),
+        zram_service(),
     )?;
     fs::write(
         out.join("overlay/usr/share/aurora/installer/index.html"),
-        installer_html(&config.branding_name, &config.accent_color),
+        installer_html(&config.branding_name, &config.accent_color, &installer),
     )?;
     fs::write(
         out.join("overlay/usr/share/aurora/installer/installer.css"),
@@ -329,7 +377,7 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     )?;
     fs::write(
         out.join("overlay/usr/share/aurora/installer/installer.js"),
-        installer_js(),
+        installer_js(&installer),
     )?;
     fs::write(
         out.join("overlay/usr/share/themes/Aurora-Neon/index.theme"),
@@ -382,6 +430,11 @@ fn prepare_host() -> Result<()> {
         "casper",
         "dosfstools",
         "parted",
+        "zram-tools",
+        "preload",
+        "linux-tools-generic",
+        "numactl",
+        "util-linux",
     ];
     run("apt-get", ["update"])?;
     let mut args = vec!["install", "-y"];
@@ -408,6 +461,9 @@ fn check_tools() -> Result<Vec<&'static str>> {
         "parted",
         "mkfs.ext4",
         "mkfs.fat",
+        "mkswap",
+        "swapon",
+        "systemctl",
     ];
 
     let missing: Vec<_> = tools
@@ -429,6 +485,7 @@ fn build_iso(tree: &Path, prompt_usb: bool, usb_device: Option<&Path>, system_mo
     check_tools()?;
 
     let config = load_config(tree)?;
+    let performance = load_performance_profile(tree)?;
     let system_scan = scan_system()?;
     let partition_plan = plan_partitions(system_scan.clone(), system_mode, 256);
     let build_root = tree.join("build/rootfs");
@@ -485,7 +542,7 @@ fn build_iso(tree: &Path, prompt_usb: bool, usb_device: Option<&Path>, system_mo
     generate_manifest(&build_root, &live_root)?;
     copy_kernel_artifacts(&build_root, &live_root)?;
     build_squashfs(&build_root, &live_root)?;
-    write_grub_cfg(&iso_root, &config)?;
+    write_grub_cfg(&iso_root, &config, &performance)?;
 
     let output_iso = tree.join("output").join(&config.iso_name);
     run(
@@ -583,16 +640,44 @@ fn plan_partitions(scan: SystemScan, mode: BootMode, disk_gb: u64) -> PartitionP
         });
     }
 
+    let disk_mb = disk_gb.saturating_mul(1024);
+    let swap_mb = recommended_swap_mb(scan.ram_mb, disk_gb);
+    let mut reserved_mb = swap_mb;
+    if matches!(firmware, BootMode::Uefi | BootMode::Both) {
+        reserved_mb = reserved_mb.saturating_add(512);
+    }
+    if matches!(firmware, BootMode::Legacy | BootMode::Both) {
+        reserved_mb = reserved_mb.saturating_add(8);
+    }
+    let mut available_mb = disk_mb.saturating_sub(reserved_mb);
+    let root_mb = if disk_gb >= 192 {
+        96 * 1024
+    } else if disk_gb >= 96 {
+        64 * 1024
+    } else {
+        available_mb.saturating_sub(16 * 1024).max(28 * 1024)
+    }
+    .min(available_mb);
+    available_mb = available_mb.saturating_sub(root_mb);
+
     partitions.push(Partition {
         label: "ROOT".to_string(),
         fs: "ext4".to_string(),
-        size_mb: disk_gb.saturating_mul(1024).saturating_sub(8192),
+        size_mb: root_mb,
         mountpoint: "/".to_string(),
     });
+    if available_mb >= 24 * 1024 {
+        partitions.push(Partition {
+            label: "HOME".to_string(),
+            fs: "ext4".to_string(),
+            size_mb: available_mb,
+            mountpoint: "/home".to_string(),
+        });
+    }
     partitions.push(Partition {
         label: "SWAP".to_string(),
         fs: "swap".to_string(),
-        size_mb: 8192,
+        size_mb: swap_mb,
         mountpoint: "swap".to_string(),
     });
 
@@ -601,6 +686,12 @@ fn plan_partitions(scan: SystemScan, mode: BootMode, disk_gb: u64) -> PartitionP
         partitions,
         notes: {
             notes.push("Create swap after root so installs can succeed on smaller disks.".to_string());
+            notes.push(format!(
+                "Hybrid memory mode: create {} MB disk swap and pair it with zram for RAM-like overflow.",
+                swap_mb
+            ));
+            notes.push("Enable zram on first boot so memory compression absorbs bursts before disk swap is touched.".to_string());
+            notes.push("If disk size allows, create a separate /home partition so reinstalls and recovery are safer.".to_string());
             notes.push(format!("Detected CPU: {} | RAM: {} MB", scan.cpu_model, scan.ram_mb));
             notes
         },
@@ -733,12 +824,18 @@ fn build_squashfs(rootfs: &Path, live_root: &Path) -> Result<()> {
     )
 }
 
-fn write_grub_cfg(iso_root: &Path, config: &BuildConfig) -> Result<()> {
+fn write_grub_cfg(iso_root: &Path, config: &BuildConfig, performance: &PerformanceProfile) -> Result<()> {
     let grub_dir = iso_root.join("boot/grub");
     fs::create_dir_all(&grub_dir)?;
+    let cmdline = if performance.kernel_cmdline_additions.is_empty() {
+        "boot=casper".to_string()
+    } else {
+        format!("boot=casper {}", performance.kernel_cmdline_additions.join(" "))
+    };
     let cfg = format!(
-        "set default=0\nset timeout=5\nmenuentry \"{} Live\" {{\n linux /live/vmlinuz boot=casper quiet splash ---\n initrd /live/initrd\n}}\n",
-        config.branding_name
+        "set default=0\nset timeout=3\nmenuentry \"{} Live\" {{\n linux /live/vmlinuz {} ---\n initrd /live/initrd\n}}\n",
+        config.branding_name,
+        cmdline
     );
     fs::write(grub_dir.join("grub.cfg"), cfg)?;
     Ok(())
@@ -751,6 +848,13 @@ fn load_config(tree: &Path) -> Result<BuildConfig> {
     serde_json::from_str(&content).context("failed to parse build config")
 }
 
+fn load_performance_profile(tree: &Path) -> Result<PerformanceProfile> {
+    let path = tree.join("profiles/performance.json");
+    let content = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    serde_json::from_str(&content).context("failed to parse performance profile")
+}
+
 fn desktop_packages(desktop: &DesktopPreset) -> Vec<String> {
     match desktop {
         DesktopPreset::Minimal => vec![
@@ -759,6 +863,8 @@ fn desktop_packages(desktop: &DesktopPreset) -> Vec<String> {
             "sudo".to_string(),
             "xfce4".to_string(),
             "lightdm".to_string(),
+            "gamemode".to_string(),
+            "mangohud".to_string(),
         ],
         DesktopPreset::Gnome => vec![
             "ubuntu-desktop".to_string(),
@@ -766,12 +872,14 @@ fn desktop_packages(desktop: &DesktopPreset) -> Vec<String> {
             "steam-installer".to_string(),
             "gamemode".to_string(),
             "gnome-tweaks".to_string(),
+            "preload".to_string(),
         ],
         DesktopPreset::Kde => vec![
             "kubuntu-desktop".to_string(),
             "steam-installer".to_string(),
             "gamemode".to_string(),
             "plasma-workspace-wayland".to_string(),
+            "preload".to_string(),
         ],
     }
 }
@@ -786,13 +894,20 @@ fn installer_desktop_file() -> String {
     "[Desktop Entry]\nType=Application\nName=AURORA Installer\nExec=/usr/local/bin/aurora-firstboot\nTerminal=false\nX-GNOME-Autostart-enabled=true\nCategories=System;\n".to_string()
 }
 
-fn firstboot_script() -> String {
-    "#!/usr/bin/env bash\nset -euo pipefail\nif command -v xdg-open >/dev/null 2>&1; then\n  xdg-open /usr/share/aurora/installer/index.html >/dev/null 2>&1 || true\nfi\n".to_string()
+fn firstboot_script(installer: &InstallerConfig) -> String {
+    format!(
+        "#!/usr/bin/env bash\nset -euo pipefail\nif systemctl list-unit-files | grep -q '^aurora-autosetup.service'; then\n  systemctl enable aurora-autosetup.service >/dev/null 2>&1 || true\n  systemctl start aurora-autosetup.service >/dev/null 2>&1 || true\nfi\nprintf '%s\\n' '{}' >/tmp/aurora-installer-mode\nif command -v xdg-open >/dev/null 2>&1; then\n  xdg-open /usr/share/aurora/installer/index.html >/dev/null 2>&1 || true\nfi\n",
+        installer.performance_mode_label
+    )
 }
 
-fn installer_html(name: &str, accent: &str) -> String {
+fn installer_html(name: &str, accent: &str, installer: &InstallerConfig) -> String {
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{name} Installer</title><link rel=\"stylesheet\" href=\"installer.css\"></head><body><main class=\"shell\"><section class=\"hero\"><p class=\"eyebrow\">Gaming-grade Ubuntu Remaster</p><h1>{name}</h1><p class=\"lede\">A Kali-inspired neon interface for a CPU-first performance distro. If you do not know your system details, the installer can scan and build the partition plan for you.</p><div class=\"cta-row\"><button id=\"scanBtn\">Scan This System</button><button id=\"planBtn\">Create Partition Plan</button><button id=\"usbBtn\">Use Inbuilt USB Writer</button></div></section><section class=\"grid\"><article class=\"card\"><h2>Firmware Support</h2><p>Legacy BIOS, UEFI, or dual-target workflows.</p></article><article class=\"card\"><h2>Desktop Presets</h2><p>GNOME, KDE, or a lean minimal shell generated from the same Rust profile.</p></article><article class=\"card\"><h2>Performance Profile</h2><p>Huge pages, gaming overlay tools, and AURORA tuning hooks are staged into the distro tree.</p></article></section><section class=\"terminal\"><div class=\"terminal-bar\"><span></span><span></span><span></span></div><pre id=\"output\">Awaiting action...</pre></section></main><script>window.AURORA_INSTALLER={{accent:\"{accent}\",name:\"{name}\"}};</script><script src=\"installer.js\"></script></body></html>"
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{name} Installer</title><link rel=\"stylesheet\" href=\"installer.css\"></head><body><main class=\"shell\"><section class=\"hero\"><p class=\"eyebrow\">Gaming-grade Ubuntu Remaster</p><h1>{name}</h1><p class=\"lede\">A Kali-inspired neon interface for a CPU-first performance distro. If you do not know your system details, the installer can scan and build the partition plan for you. Warp mode is staged to auto-enable compressed memory, faster boot defaults, and recovery tooling.</p><div class=\"cta-row\"><button id=\"scanBtn\">Scan This System</button><button id=\"planBtn\">Create Partition Plan</button><button id=\"usbBtn\">Use Inbuilt USB Writer</button><button id=\"boostBtn\">Enable {}</button></div></section><section class=\"grid\"><article class=\"card\"><h2>Firmware Support</h2><p>Legacy BIOS, UEFI, or dual-target workflows.</p></article><article class=\"card\"><h2>Desktop Presets</h2><p>GNOME, KDE, or a lean minimal shell generated from the same Rust profile.</p></article><article class=\"card\"><h2>Performance Profile</h2><p>Huge pages, zram memory boost, gaming overlay tools, and AURORA tuning hooks are staged into the distro tree.</p></article><article class=\"card\"><h2>Boot Repair</h2><p>Recovery-first utilities can rebuild GRUB for legacy BIOS or UEFI after install.</p></article></section><section class=\"terminal\"><div class=\"terminal-bar\"><span></span><span></span><span></span></div><pre id=\"output\">Awaiting action...</pre></section></main><script>window.AURORA_INSTALLER={{accent:\"{accent}\",name:\"{name}\",modeLabel:\"{}\",memoryBoost:{},bootRepair:{}}};</script><script src=\"installer.js\"></script></body></html>",
+        installer.performance_mode_label,
+        installer.performance_mode_label,
+        installer.enable_memory_boost_wizard,
+        installer.enable_boot_repair_tools
     )
 }
 
@@ -802,8 +917,11 @@ fn installer_css(accent: &str) -> String {
     )
 }
 
-fn installer_js() -> String {
-    "const output=document.getElementById('output');const write=(lines)=>output.textContent=lines.join('\\n');document.getElementById('scanBtn').addEventListener('click',()=>write(['Scanning current machine...','- detect firmware mode','- detect CPU model and RAM','- enumerate storage devices','Result: if details are missing, aurora-distro can fall back to automatic planning.']));document.getElementById('planBtn').addEventListener('click',()=>write(['Generating partition plan...','- legacy BIOS: bios_grub + root + swap','- UEFI: EFI + root + swap','- BOTH: EFI + bios_grub + root + swap','Result: installer chooses the correct layout for the detected firmware.']));document.getElementById('usbBtn').addEventListener('click',()=>write(['Inbuilt USB writer flow','1. Confirm target device','2. Verify path is a block device','3. Write ISO with dd + sync','4. Return success/failure logs to the user']));".to_string()
+fn installer_js(installer: &InstallerConfig) -> String {
+    format!(
+        "const cfg=window.AURORA_INSTALLER;const output=document.getElementById('output');const write=(lines)=>output.textContent=lines.join('\\n');document.getElementById('scanBtn').addEventListener('click',()=>write(['Scanning current machine...','- detect firmware mode','- detect CPU model and RAM','- enumerate storage devices','- estimate swap + zram balance','Result: if details are missing, aurora-distro can fall back to automatic planning.']));document.getElementById('planBtn').addEventListener('click',()=>write(['Generating partition plan...','- legacy BIOS: bios_grub + root + home + swap','- UEFI: EFI + root + home + swap','- BOTH: EFI + bios_grub + root + home + swap','- enable compressed zram for RAM-like overflow before disk swap','Result: installer chooses the correct layout for the detected firmware.']));document.getElementById('usbBtn').addEventListener('click',()=>write(['Inbuilt USB writer flow','1. Confirm target device','2. Verify path is a block device','3. Write ISO with dd + sync','4. Return success/failure logs to the user']));document.getElementById('boostBtn').addEventListener('click',()=>write([''+cfg.modeLabel+' activated','- enable zram memory boost: {}% of RAM','- trim slow background services','- apply faster readahead and I/O policy','- keep boot repair utilities on standby','Result: faster boot, stronger responsiveness, and more burst headroom under load.']));",
+        if installer.enable_memory_boost_wizard { "60" } else { "0" }
+    )
 }
 
 fn gtk_theme_index() -> String {
@@ -822,17 +940,54 @@ fn icon_theme_index() -> String {
 
 fn performance_shell_script(profile: &PerformanceProfile) -> String {
     format!(
-        "#!/usr/bin/env bash\nexport AURORA_PROFILE_NAME=\"{}\"\nexport AURORA_CPU_GOVERNOR=\"{}\"\nexport AURORA_ENABLE_HUGEPAGES=\"{}\"\nexport AURORA_ENABLE_GAMEMODE=\"{}\"\nexport AURORA_ENABLE_MANGOHUD=\"{}\"\n",
+        "#!/usr/bin/env bash\nexport AURORA_PROFILE_NAME=\"{}\"\nexport AURORA_CPU_GOVERNOR=\"{}\"\nexport AURORA_ENABLE_HUGEPAGES=\"{}\"\nexport AURORA_ENABLE_GAMEMODE=\"{}\"\nexport AURORA_ENABLE_MANGOHUD=\"{}\"\nexport AURORA_ENABLE_ZRAM=\"{}\"\nexport AURORA_ZRAM_FRACTION_PERCENT=\"{}\"\nexport AURORA_USE_TMPFS_FOR_TEMP=\"{}\"\nexport AURORA_DISABLE_UNNEEDED_SERVICES=\"{}\"\nexport AURORA_ENABLE_PRELOAD=\"{}\"\nexport AURORA_IO_SCHEDULER=\"{}\"\nexport AURORA_SWAP_POLICY=\"{}\"\nexport AURORA_READAHEAD_KB=\"{}\"\n",
         profile.name,
         profile.cpu_governor,
         profile.enable_hugepages,
         profile.enable_gamemode,
         profile.enable_mangohud,
+        profile.enable_zram,
+        profile.zram_fraction_percent,
+        profile.use_tmpfs_for_temp,
+        profile.disable_unneeded_services,
+        profile.enable_preload,
+        profile.io_scheduler,
+        profile.swap_partition_policy,
+        profile.readahead_kb,
     )
 }
 
-fn performance_sysctl_conf() -> String {
-    "vm.swappiness=10\nvm.dirty_ratio=5\nvm.dirty_background_ratio=2\nkernel.numa_balancing=1\nkernel.sched_autogroup_enabled=0\n".to_string()
+fn performance_sysctl_conf(_profile: &PerformanceProfile) -> String {
+    format!(
+        "vm.swappiness=15\nvm.dirty_ratio=5\nvm.dirty_background_ratio=2\nvm.vfs_cache_pressure=50\nvm.page-cluster=0\nkernel.numa_balancing=1\nkernel.sched_autogroup_enabled=0\nvm.max_map_count=1048576\nvm.watermark_boost_factor=0\nvm.watermark_scale_factor=125\n",
+    )
+}
+
+fn performance_defaults(profile: &PerformanceProfile) -> String {
+    format!(
+        "AURORA_PROFILE_NAME={}\nAURORA_CPU_GOVERNOR={}\nAURORA_ENABLE_ZRAM={}\nAURORA_ZRAM_FRACTION_PERCENT={}\nAURORA_ENABLE_PRELOAD={}\nAURORA_IO_SCHEDULER={}\nAURORA_READAHEAD_KB={}\nAURORA_DISABLE_UNNEEDED_SERVICES={}\nAURORA_SWAP_POLICY={}\n",
+        profile.name,
+        profile.cpu_governor,
+        profile.enable_zram,
+        profile.zram_fraction_percent,
+        profile.enable_preload,
+        profile.io_scheduler,
+        profile.readahead_kb,
+        profile.disable_unneeded_services,
+        profile.swap_partition_policy
+    )
+}
+
+fn autosetup_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nCONFIG=/etc/default/aurora-performance\nif [ -f \"$CONFIG\" ]; then\n  # shellcheck disable=SC1091\n  . \"$CONFIG\"\nfi\nfor cpu in /sys/devices/system/cpu/cpu[0-9]*; do\n  if [ -w \"$cpu/cpufreq/scaling_governor\" ]; then\n    printf '%s' \"${AURORA_CPU_GOVERNOR:-performance}\" > \"$cpu/cpufreq/scaling_governor\" || true\n  fi\n done\nif [ \"${AURORA_USE_TMPFS_FOR_TEMP:-true}\" = \"true\" ]; then\n  grep -q '^tmpfs /tmp tmpfs' /etc/fstab || printf 'tmpfs /tmp tmpfs defaults,noatime,mode=1777 0 0\\n' >> /etc/fstab\nfi\nif [ \"${AURORA_ENABLE_PRELOAD:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable preload >/dev/null 2>&1 || true\n  systemctl start preload >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_DISABLE_UNNEEDED_SERVICES:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  for svc in bluetooth cups apport whoopsie snapd ModemManager; do\n    systemctl disable \"$svc\" >/dev/null 2>&1 || true\n    systemctl stop \"$svc\" >/dev/null 2>&1 || true\n  done\nfi\nif [ -n \"${AURORA_READAHEAD_KB:-}\" ]; then\n  for block in /sys/block/*/queue/read_ahead_kb; do\n    [ -w \"$block\" ] && printf '%s' \"$AURORA_READAHEAD_KB\" > \"$block\" || true\n  done\nfi\nif [ -n \"${AURORA_IO_SCHEDULER:-}\" ]; then\n  for sched in /sys/block/*/queue/scheduler; do\n    [ -w \"$sched\" ] && printf '%s' \"$AURORA_IO_SCHEDULER\" > \"$sched\" || true\n  done\nfi\nif [ \"${AURORA_ENABLE_ZRAM:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable aurora-zram-setup.service >/dev/null 2>&1 || true\n  systemctl start aurora-zram-setup.service >/dev/null 2>&1 || true\nfi\nsysctl --system >/dev/null 2>&1 || true\n".to_string()
+}
+
+fn autosetup_service() -> String {
+    "[Unit]\nDescription=AURORA automatic performance setup\nAfter=multi-user.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/aurora-autosetup\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\n".to_string()
+}
+
+fn zram_service() -> String {
+    "[Unit]\nDescription=AURORA zram memory boost\nAfter=local-fs.target\n\n[Service]\nType=oneshot\nExecStart=/bin/bash -lc 'modprobe zram || true; echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true; mem_total_kb=$(awk \"/MemTotal/ {print \\$2}\" /proc/meminfo); size_bytes=$((mem_total_kb * 1024 * 60 / 100)); echo ${size_bytes:-0} > /sys/block/zram0/disksize 2>/dev/null || true; mkswap /dev/zram0 >/dev/null 2>&1 || true; swapon -p 100 /dev/zram0 >/dev/null 2>&1 || true'\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\n".to_string()
 }
 
 fn default_wallpaper_svg(name: &str, accent: &str) -> String {
@@ -868,6 +1023,18 @@ fn hex_channel_to_float(hex: &str, offset: usize) -> f32 {
         .and_then(|value| u8::from_str_radix(value, 16).ok())
         .unwrap_or(255);
     channel as f32 / 255.0
+}
+
+fn recommended_swap_mb(ram_mb: u64, disk_gb: u64) -> u64 {
+    let base = if ram_mb <= 8 * 1024 {
+        ram_mb.max(4096)
+    } else if ram_mb <= 32 * 1024 {
+        (ram_mb / 2).max(8192)
+    } else {
+        (ram_mb / 3).max(12288)
+    };
+    let disk_cap = disk_gb.saturating_mul(1024) / 5;
+    base.min(disk_cap).max(4096)
 }
 
 fn ensure_root() -> Result<()> {

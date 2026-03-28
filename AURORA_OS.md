@@ -95,6 +95,8 @@ sudo ./scripts/aurora-tune.sh
 - `aurora-api` - Public API
 - `aurora-cli` - Command-line interface
 - `aurora-distro` - Ubuntu 24 remaster, USB writer, partition planner, boot repair
+- Docker-assisted Ubuntu 24 remaster path for more repeatable ISO builds
+- first-boot autosetup services for zram, service trimming, storage tuning, and boot responsiveness
 
 **SIMD Support:**
 - Scalar (fallback)

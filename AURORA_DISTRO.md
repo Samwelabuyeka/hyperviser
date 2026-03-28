@@ -9,6 +9,8 @@
 - optional inbuilt USB writing after ISO creation
 - system scanning and partition planning when hardware details are unknown
 - GRUB-based boot repair for BIOS and UEFI installs
+- autosetup performance services for first boot
+- hybrid compressed-memory tuning with zram plus disk swap
 
 ## Performance Goal
 
@@ -17,6 +19,9 @@ The target is to push CPU-heavy workloads much harder than a stock install by co
 - performance governor defaults
 - huge page friendly configuration
 - lower-latency boot/runtime defaults
+- zram-backed compressed memory to delay disk swap pressure
+- service trimming and preload-style caching
+- stronger storage readahead and I/O defaults
 - the AURORA runtime and tuning stack
 
 This is a performance-oriented distro goal, not a universal guarantee that every workload will be 3x faster.
@@ -30,6 +35,22 @@ cargo run -p aurora-distro -- prepare-host
 ```
 
 That installs the main Ubuntu 24 remaster dependencies required by the toolkit.
+
+## Docker Remaster Path
+
+If you prefer a more self-contained Ubuntu 24 builder, use:
+
+```bash
+./scripts/remaster-in-docker.sh
+```
+
+That script builds `aurora-distro/Dockerfile.remaster`, mounts the repo into the container, initializes the distro tree, scans the system, plans partitions, validates tools, and starts the ISO build.
+
+Important:
+
+- Docker still needs privileged access for mount/chroot-heavy remaster steps.
+- This is meant for Linux hosts with Docker available.
+- In the current Windows Codex session, Docker is not installed and WSL access is blocked, so the repo can be prepared for this workflow here but not executed end-to-end here.
 
 ## Initialize A Build Tree
 
@@ -48,6 +69,8 @@ This generates:
 - installer UX files under `overlay/usr/share/aurora/installer/`
 - first-boot launcher and autostart entries for the installer shell
 - performance profile shell/sysctl files under `overlay/etc/`
+- autosetup services under `overlay/etc/systemd/system/`
+- `overlay/usr/local/bin/aurora-autosetup` for boot-time tuning
 
 ## Inspect Hardware
 
@@ -62,6 +85,14 @@ cargo run -p aurora-distro -- plan-partitions --mode auto --disk-gb 512
 ```
 
 The tool will fall back to system scanning and create a BIOS/UEFI-aware partition plan.
+
+The generated plan now aims for:
+
+- EFI support where needed
+- BIOS GRUB support where needed
+- root plus optional home partitioning on larger disks
+- a dedicated swap partition sized from available RAM and disk
+- zram enabled on first boot so compressed memory behaves like fast overflow before disk swap is used heavily
 
 ## Build ISO
 
@@ -81,6 +112,14 @@ The build command now also writes:
 - `distro/build/partition-plan.json`
 
 so the remaster output keeps the detected hardware scan and generated partition strategy together.
+
+The generated runtime profile now also stages:
+
+- `zram-tools`
+- `preload`
+- `numactl`
+- `linux-tools-generic`
+- AURORA autosetup and zram systemd services
 
 ## Boot Repair
 

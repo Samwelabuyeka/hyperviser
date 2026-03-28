@@ -80,7 +80,8 @@ AURORA is a hardware-adaptive compute runtime that extracts near-maximum perform
 - Ubuntu 24.04 remaster workflow via `aurora-distro`
 - BIOS + UEFI live ISO generation
 - custom branding, desktop presets, and gaming/Kali-style theme scaffolding
-- host setup, USB writing, partition planning, and boot repair helpers
+- host setup, Docker remaster path, USB writing, partition planning, and boot repair helpers
+- first-boot autosetup with zram-style compressed memory and faster runtime defaults
 
 ## Installation
 
