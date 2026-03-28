@@ -52,14 +52,10 @@ pub struct Allocation {
     /// Alignment
     pub alignment: usize,
     /// Host pointer (if host-accessible)
-    pub host_ptr: Option<*mut u8>,
+    pub host_ptr: Option<usize>,
     /// Device pointer (if device memory)
     pub device_ptr: Option<u64>,
 }
-
-// Safety: Allocation is Send + Sync when used correctly
-unsafe impl Send for Allocation {}
-unsafe impl Sync for Allocation {}
 
 impl Allocation {
     /// Create a new allocation descriptor
@@ -114,7 +110,7 @@ pub struct MemoryPool {
     /// Free blocks (size -> list of allocations)
     free_blocks: Arc<Mutex<std::collections::BTreeMap<usize, Vec<Allocation>>>>,
     /// Active allocations
-    active: Arc<Mutex<std::collections::HashMap<u64, Allocation>>,
+    active: Arc<Mutex<std::collections::HashMap<u64, Allocation>>>,
     /// Next allocation ID
     next_id: Arc<Mutex<u64>>,
 }

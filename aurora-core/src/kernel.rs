@@ -164,7 +164,7 @@ pub trait Kernel: Send + Sync {
 }
 
 /// Kernel registry for looking up kernels
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct KernelRegistry {
     kernels: std::collections::HashMap<KernelId, Box<dyn Kernel>>,
 }
@@ -203,7 +203,7 @@ impl KernelRegistry {
 }
 
 /// Built-in kernel types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KernelType {
     /// Element-wise unary operation
     Unary(UnaryOp),
@@ -228,7 +228,7 @@ pub enum KernelType {
 }
 
 /// Unary operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     /// Identity
     Identity,
@@ -275,7 +275,7 @@ pub enum UnaryOp {
 }
 
 /// Binary operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     /// Addition
     Add,
@@ -314,7 +314,7 @@ pub enum BinaryOp {
 }
 
 /// Reduction operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ReduceOp {
     /// Sum
     Sum,
@@ -339,7 +339,7 @@ pub enum ReduceOp {
 }
 
 /// Pooling types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PoolType {
     /// Maximum pooling
     Max,

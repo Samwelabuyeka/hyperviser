@@ -82,7 +82,7 @@ sudo ./scripts/aurora-tune.sh
 
 ### 4. AURORA Runtime
 
-**11 Rust Crates:**
+**12 Rust Crates:**
 - `aurora-core` - Foundation types
 - `aurora-profiler` - Hardware detection
 - `aurora-cpu` - CPU compute engine
@@ -94,6 +94,9 @@ sudo ./scripts/aurora-tune.sh
 - `aurora-autotune` - Auto-tuning
 - `aurora-api` - Public API
 - `aurora-cli` - Command-line interface
+- `aurora-distro` - Ubuntu 24 remaster, USB writer, partition planner, boot repair
+- Docker-assisted Ubuntu 24 remaster path for more repeatable ISO builds
+- first-boot autosetup services for zram, service trimming, storage tuning, and boot responsiveness
 
 **SIMD Support:**
 - Scalar (fallback)
@@ -162,6 +165,27 @@ sudo reboot
 sudo ./scripts/aurora-tune.sh
 sudo ./install/install.sh --kernel --tune
 ```
+
+## Remastering Ubuntu 24 Into AURORA OS
+
+Use the Rust-native distro tool:
+
+```bash
+cargo run -p aurora-distro -- prepare-host
+cargo run -p aurora-distro -- init-tree --out distro --distro-name "Aurora Neon" --desktop gnome
+sudo cargo run -p aurora-distro -- build-iso --tree distro --prompt-usb
+```
+
+Capabilities included in the distro workflow:
+
+- BIOS legacy support
+- UEFI support
+- desktop presets for GNOME, KDE, and minimal shells
+- custom branding and logo path configuration
+- Kali-inspired gaming-themed GRUB/Plymouth/desktop overlays
+- hardware scan and partition planning
+- USB writer flow after ISO build
+- boot repair for BIOS and UEFI systems
 
 ## Usage
 

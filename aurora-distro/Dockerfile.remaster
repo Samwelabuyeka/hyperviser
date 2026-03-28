@@ -1,0 +1,38 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    curl \
+    git \
+    ca-certificates \
+    debootstrap \
+    rsync \
+    xorriso \
+    grub-pc-bin \
+    grub-efi-amd64-bin \
+    grub-common \
+    mtools \
+    squashfs-tools \
+    casper \
+    dosfstools \
+    parted \
+    zram-tools \
+    preload \
+    numactl \
+    linux-tools-generic \
+    util-linux \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /workspace/hyperviser
+
+COPY aurora-distro/docker-entrypoint.sh /usr/local/bin/aurora-distro-entrypoint
+RUN chmod +x /usr/local/bin/aurora-distro-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/aurora-distro-entrypoint"]

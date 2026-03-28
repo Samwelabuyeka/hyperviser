@@ -218,7 +218,7 @@ impl MatmulBenchmark {
     }
 }
 
-impl MicroBenchmark for MicroBenchmark for MatmulBenchmark {
+impl MicroBenchmark for MatmulBenchmark {
     fn name(&self) -> &str {
         "matmul"
     }

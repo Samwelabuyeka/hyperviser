@@ -16,7 +16,8 @@ pub mod memory;
 pub use device::{Device, DeviceId, DeviceType, ComputeCapability, SimdLevel};
 pub use error::{AuroraError, Result};
 pub use tensor::{Tensor, TensorShape, DataType, Layout};
-pub use types::{Scalar, Dim, Stride, Range, Padding, ConvParams, PoolParams};
+pub use types::{Scalar, Dim, Range, Padding, ConvParams, PoolParams};
+pub use tensor::Stride;
 pub use kernel::{Kernel, KernelId, KernelSignature, LaunchConfig, KernelType, BinaryOp, UnaryOp, ReduceOp, PoolType};
 pub use graph::{ComputeGraph, NodeId, OpType, GraphExecutor, ExecutionProfile};
 pub use memory::{MemoryPool, Allocation, MemoryType, MemoryStats};
@@ -29,15 +30,15 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Build information
 pub mod build_info {
     /// Git commit hash
-    pub const GIT_COMMIT: &str = env!("GIT_COMMIT", "unknown");
+    pub const GIT_COMMIT: &str = option_env!("GIT_COMMIT").unwrap_or("unknown");
     /// Build timestamp
-    pub const BUILD_TIME: &str = env!("BUILD_TIME", "unknown");
+    pub const BUILD_TIME: &str = option_env!("BUILD_TIME").unwrap_or("unknown");
     /// Target architecture
-    pub const TARGET: &str = env!("TARGET", "unknown");
+    pub const TARGET: &str = option_env!("TARGET").unwrap_or("unknown");
     /// Build profile
-    pub const PROFILE: &str = env!("PROFILE", "unknown");
+    pub const PROFILE: &str = option_env!("PROFILE").unwrap_or("unknown");
     /// Rust version
-    pub const RUST_VERSION: &str = env!("RUSTC_VERSION", "unknown");
+    pub const RUST_VERSION: &str = option_env!("RUSTC_VERSION").unwrap_or("unknown");
 }
 
 static INITIALIZED: AtomicBool = AtomicBool::new(false);

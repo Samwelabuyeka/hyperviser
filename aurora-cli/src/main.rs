@@ -5,8 +5,7 @@ use aurora_core::initialize;
 use aurora_profiler::{print_profile, HardwareProfiler};
 use clap::{Parser, Subcommand};
 use colored::*;
-use std::process;
-use tracing::{info, Level};
+use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
 /// AURORA - Adaptive Unified Runtime & Orchestration for Resource Acceleration
@@ -216,7 +215,10 @@ async fn cmd_benchmark(name: Option<String>, iterations: usize, format: OutputFo
     match format {
         OutputFormat::Text => {
             println!("\n{} Results:", "Benchmark".green().bold());
-            println!("  CPU Memory Bandwidth: {:.2} GB/s", benchmarks.memory.memory_bandwidth_gbps);
+            println!(
+                "  CPU Memory Bandwidth: {:.2} GB/s",
+                benchmarks.memory.numa_bandwidth_gbps
+            );
             println!("  CPU Matmul: {:.2} GFLOPS", benchmarks.cpu.matmul_gflops);
             println!("  CPU Vector: {:.2} GFLOPS", benchmarks.cpu.vector_gflops);
         }
@@ -252,7 +254,7 @@ async fn cmd_status(watch: bool, interval: u64) -> Result<()> {
 }
 
 fn print_status() {
-    use sysinfo::{System, SystemExt, CpuExt, ProcessExt};
+    use sysinfo::System;
     
     let mut sys = System::new_all();
     sys.refresh_all();
@@ -262,7 +264,12 @@ fn print_status() {
     println!("{}", "════════════════════".cyan());
     
     // CPU usage
-    let cpu_usage: f32 = sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / sys.cpus().len() as f32;
+    let cpu_total: f32 = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).sum();
+    let cpu_usage: f32 = if sys.cpus().is_empty() {
+        0.0
+    } else {
+        cpu_total / sys.cpus().len() as f32
+    };
     println!("CPU Usage: {:.1}%", cpu_usage);
     
     // Memory usage
@@ -275,13 +282,17 @@ fn print_status() {
     // AURORA processes
     let aurora_procs: Vec<_> = sys.processes()
         .values()
-        .filter(|p| p.name().contains("aurora"))
+        .filter(|process| process.name().to_string().contains("aurora"))
         .collect();
     
     println!("AURORA Processes: {}", aurora_procs.len());
-    for proc in aurora_procs {
-        println!("  {} (PID: {}) - {} MB", 
-            proc.name(), proc.pid(), proc.memory() / 1024);
+    for process in aurora_procs {
+        println!(
+            "  {} (PID: {}) - {} MB",
+            process.name().to_string(),
+            process.pid(),
+            process.memory() / 1024
+        );
     }
 }
 

@@ -1,6 +1,6 @@
 //! SIMD operations with multi-versioning
 
-use crate::SimdLevel;
+use aurora_core::device::SimdLevel;
 
 /// SIMD vector operations trait
 pub trait VectorOps {

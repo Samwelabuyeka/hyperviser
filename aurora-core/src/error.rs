@@ -173,11 +173,11 @@ impl AuroraError {
     /// Check if error is fatal
     pub fn is_fatal(&self) -> bool {
         matches!(self,
-            Self::InvalidArgument { .. } |
+            Self::InvalidArgument(..) |
             Self::NotInitialized |
             Self::AlreadyInitialized |
             Self::Cancelled |
-            Self::PermissionDenied { .. }
+            Self::PermissionDenied(..)
         )
     }
 }

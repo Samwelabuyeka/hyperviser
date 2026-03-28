@@ -10,13 +10,13 @@ pub mod simd;
 pub mod numa;
 pub mod thread_pool;
 
-use aurora_core::device::{Device, DeviceId, SimdLevel as CoreSimdLevel};
+use aurora_core::device::{Device, SimdLevel as CoreSimdLevel};
 use aurora_core::error::Result;
-use aurora_core::tensor::Tensor;
 use aurora_profiler::cpu::CpuInfo;
 use tracing::info;
 
-pub use simd::{SimdLevel, SimdDispatcher, VectorOps, ScalarOps, Sse2Ops, AvxOps, Avx2Ops, Avx512Ops};
+pub use aurora_core::device::SimdLevel;
+pub use simd::{SimdDispatcher, VectorOps, ScalarOps, Sse2Ops, AvxOps, Avx2Ops, Avx512Ops};
 pub use thread_pool::{ThreadPool, Task, TaskId};
 
 /// CPU compute engine
@@ -112,43 +112,6 @@ impl std::fmt::Debug for CpuEngine {
             .field("simd_level", &self.simd_dispatcher.level())
             .field("threads", &self.thread_pool.num_workers())
             .finish()
-    }
-}
-
-/// SIMD level for CPU kernels
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SimdLevel {
-    /// Scalar (no SIMD)
-    Scalar,
-    /// SSE2 (128-bit)
-    Sse2,
-    /// AVX (256-bit)
-    Avx,
-    /// AVX2 (256-bit with FMA)
-    Avx2,
-    /// AVX-512 (512-bit)
-    Avx512,
-}
-
-impl SimdLevel {
-    /// Get vector width in bytes
-    pub const fn vector_width(&self) -> usize {
-        match self {
-            SimdLevel::Scalar => 8,
-            SimdLevel::Sse2 => 16,
-            SimdLevel::Avx | SimdLevel::Avx2 => 32,
-            SimdLevel::Avx512 => 64,
-        }
-    }
-    
-    /// Get vector width in f32 elements
-    pub const fn f32_width(&self) -> usize {
-        self.vector_width() / 4
-    }
-    
-    /// Get vector width in f64 elements
-    pub const fn f64_width(&self) -> usize {
-        self.vector_width() / 8
     }
 }
 

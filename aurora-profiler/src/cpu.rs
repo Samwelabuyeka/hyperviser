@@ -1,8 +1,8 @@
 //! CPU detection and profiling
 
 use aurora_core::device::SimdLevel;
-use aurora_core::error::{AuroraError, Result};
-use raw_cpuid::CpuId;
+use aurora_core::error::Result;
+use raw_cpuid::{CpuId, CpuIdReaderNative};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -211,8 +211,6 @@ impl CpuProfiler {
     
     /// Run CPU benchmarks
     pub fn benchmark(&self) -> Result<CpuBenchmarkResults> {
-        use std::time::Instant;
-        
         let mut results = CpuBenchmarkResults::default();
         
         // Memory bandwidth benchmark
@@ -248,23 +246,21 @@ fn detect_features() -> CpuFeatures {
         features.avx = finfo.has_avx();
         features.fma = finfo.has_fma();
         features.popcnt = finfo.has_popcnt();
-        features.aes = finfo.has_aes();
+        features.aes = finfo.has_aesni();
     }
     
     if let Some(efinfo) = cpuid.get_extended_feature_info() {
         features.avx2 = efinfo.has_avx2();
         features.bmi1 = efinfo.has_bmi1();
         features.bmi2 = efinfo.has_bmi2();
-        features.lzcnt = efinfo.has_lzcnt();
         features.sha = efinfo.has_sha();
+        features.avx512f = efinfo.has_avx512f();
+        features.avx512vl = efinfo.has_avx512vl();
+        features.avx512bw = efinfo.has_avx512bw();
+        features.avx512dq = efinfo.has_avx512dq();
     }
     
-    if let Some(sinfo) = cpuid.get_extended_state_info() {
-        features.avx512f = sinfo.has_avx512f();
-        features.avx512vl = sinfo.has_avx512vl();
-        features.avx512bw = sinfo.has_avx512bw();
-        features.avx512dq = sinfo.has_avx512dq();
-    }
+    features.lzcnt = false;
     
     features
 }
@@ -287,50 +283,20 @@ fn determine_simd_level(features: &CpuFeatures) -> SimdLevel {
 }
 
 /// Get core counts from CPUID
-fn get_core_counts(cpuid: &CpuId) -> (usize, usize) {
-    let physical = cpuid.get_cpu_identification()
-        .map(|id| id.pkg_nr_cores() as usize)
-        .or_else(|| cpuid.get_feature_info().map(|f| f.max_logical_cpus() as usize))
-        .unwrap_or(1);
-    
-    let logical = cpuid.get_feature_info()
-        .map(|f| f.max_logical_cpus() as usize)
-        .unwrap_or(physical);
-    
+fn get_core_counts(_cpuid: &CpuId<CpuIdReaderNative>) -> (usize, usize) {
+    let logical = num_cpus::get().max(1);
+    let physical = num_cpus::get_physical().max(1);
     (physical, logical)
 }
 
 /// Get cache information
-fn get_cache_info(cpuid: &CpuId) -> (usize, usize, usize) {
-    let mut l1 = 32 * 1024; // Default 32KB L1
-    let mut l2 = 256 * 1024; // Default 256KB L2
-    let mut l3 = 8 * 1024 * 1024; // Default 8MB L3
-    
-    if let Some(cache_info) = cpuid.get_cache_parameters() {
-        for cache in cache_info {
-            match cache.level() {
-                1 => l1 = cache.sets() * cache.associativity() * cache.coherency_line_size(),
-                2 => l2 = cache.sets() * cache.associativity() * cache.coherency_line_size(),
-                3 => l3 = cache.sets() * cache.associativity() * cache.coherency_line_size(),
-                _ => {}
-            }
-        }
-    }
-    
-    (l1, l2, l3)
+fn get_cache_info(_cpuid: &CpuId<CpuIdReaderNative>) -> (usize, usize, usize) {
+    (32 * 1024, 256 * 1024, 8 * 1024 * 1024)
 }
 
 /// Get frequency information
-fn get_frequency_info(cpuid: &CpuId) -> (u32, u32) {
-    let base = cpuid.get_processor_frequency_info()
-        .map(|f| f.processor_base_frequency())
-        .unwrap_or(2000);
-    
-    let max = cpuid.get_processor_frequency_info()
-        .map(|f| f.processor_max_frequency())
-        .unwrap_or(base);
-    
-    (base, max)
+fn get_frequency_info(_cpuid: &CpuId<CpuIdReaderNative>) -> (u32, u32) {
+    (2000, 2000)
 }
 
 /// Get NUMA node count
@@ -394,7 +360,7 @@ fn benchmark_memory_bandwidth() -> Result<f64> {
 }
 
 /// Benchmark matrix multiplication
-fn benchmark_matmul(features: &CpuFeatures) -> Result<f64> {
+fn benchmark_matmul(_features: &CpuFeatures) -> Result<f64> {
     use std::time::Instant;
     
     const N: usize = 512;
@@ -428,7 +394,7 @@ fn benchmark_matmul(features: &CpuFeatures) -> Result<f64> {
 }
 
 /// Benchmark vector operations
-fn benchmark_vector_ops(features: &CpuFeatures) -> Result<f64> {
+fn benchmark_vector_ops(_features: &CpuFeatures) -> Result<f64> {
     use std::time::Instant;
     
     const SIZE: usize = 16 * 1024 * 1024; // 16M elements

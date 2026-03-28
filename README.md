@@ -76,6 +76,13 @@ AURORA is a hardware-adaptive compute runtime that extracts near-maximum perform
 - Performance governor management
 - Real-time scheduler support
 
+### AURORA Distro Toolkit
+- Ubuntu 24.04 remaster workflow via `aurora-distro`
+- BIOS + UEFI live ISO generation
+- custom branding, desktop presets, and gaming/Kali-style theme scaffolding
+- host setup, Docker remaster path, USB writing, partition planning, and boot repair helpers
+- first-boot autosetup with zram-style compressed memory and faster runtime defaults
+
 ## Installation
 
 ### Prerequisites
