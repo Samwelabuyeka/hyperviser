@@ -25,12 +25,20 @@ enum Commands {
         #[arg(long, value_enum, default_value = "gnome")]
         desktop: DesktopPreset,
     },
+    /// Install the Ubuntu 24 remaster host dependencies on a Linux build machine.
+    PrepareHost,
     /// Validate that the host has the tools needed for remastering.
     CheckTools,
     /// Build a full Ubuntu-based ISO from the build tree.
     BuildIso {
         #[arg(long, default_value = "distro")]
         tree: PathBuf,
+        #[arg(long)]
+        prompt_usb: bool,
+        #[arg(long)]
+        usb_device: Option<PathBuf>,
+        #[arg(long, value_enum, default_value = "auto")]
+        system_mode: BootMode,
     },
     /// Probe the current machine to determine firmware and disk defaults.
     ScanSystem,
@@ -88,11 +96,13 @@ struct BuildConfig {
     arch: String,
     desktop: DesktopPreset,
     package_sets: Vec<String>,
+    extra_packages: Vec<String>,
     bios_legacy: bool,
     uefi: bool,
     kali_like_theme: bool,
     theme_name: String,
     accent_color: String,
+    performance_goal: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,8 +137,14 @@ fn main() -> Result<()> {
             distro_name,
             desktop,
         } => init_tree(&out, &distro_name, desktop),
+        Commands::PrepareHost => prepare_host(),
         Commands::CheckTools => check_tools().map(|_| ()),
-        Commands::BuildIso { tree } => build_iso(&tree),
+        Commands::BuildIso {
+            tree,
+            prompt_usb,
+            usb_device,
+            system_mode,
+        } => build_iso(&tree, prompt_usb, usb_device.as_deref(), system_mode),
         Commands::ScanSystem => {
             println!("{}", serde_json::to_string_pretty(&scan_system()?)?);
             Ok(())
@@ -151,6 +167,9 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         out.join("profiles"),
         out.join("overlay"),
         out.join("overlay/etc/skel"),
+        out.join("overlay/etc/aurora-installer"),
+        out.join("overlay/usr/share/plymouth/themes/aurora-neon"),
+        out.join("overlay/usr/share/grub/themes/aurora"),
         out.join("overlay/usr/share/backgrounds/aurora"),
         out.join("assets"),
         out.join("assets/branding"),
@@ -173,11 +192,19 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         arch: "amd64".to_string(),
         desktop: desktop.clone(),
         package_sets: desktop_packages(&desktop),
+        extra_packages: vec![
+            "gamemode".to_string(),
+            "mangohud".to_string(),
+            "htop".to_string(),
+            "nvtop".to_string(),
+            "git".to_string(),
+        ],
         bios_legacy: true,
         uefi: true,
         kali_like_theme: true,
         theme_name: "Aurora Neon Assault".to_string(),
         accent_color: "#12f7ff".to_string(),
+        performance_goal: "Tune for strong CPU throughput on supported hardware; 3x uplift is a target for selective workloads, not a universal guarantee.".to_string(),
     };
 
     fs::write(
@@ -190,7 +217,27 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     )?;
     fs::write(
         out.join("overlay/etc/default/grub"),
-        "GRUB_TIMEOUT=5\nGRUB_GFXMODE=1920x1080\nGRUB_THEME=/boot/grub/themes/aurora/theme.txt\n",
+        "GRUB_TIMEOUT=5\nGRUB_GFXMODE=1920x1080\nGRUB_THEME=/usr/share/grub/themes/aurora/theme.txt\nGRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash mitigations=off transparent_hugepage=always\"\n",
+    )?;
+    fs::write(
+        out.join("overlay/etc/aurora-installer/README"),
+        "The installer can scan firmware/disk details automatically and use aurora-distro plan-partitions output when users skip manual hardware entry.\n",
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/backgrounds/aurora/gaming-kali.svg"),
+        default_wallpaper_svg(&config.branding_name, &config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/grub/themes/aurora/theme.txt"),
+        grub_theme_txt(&config.branding_name, &config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/plymouth/themes/aurora-neon/aurora-neon.plymouth"),
+        plymouth_theme_metadata(&config.theme_name),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/plymouth/themes/aurora-neon/aurora-neon.script"),
+        plymouth_theme_script(&config.branding_name, &config.accent_color),
     )?;
     fs::write(
         out.join("assets/branding/README.md"),
@@ -198,6 +245,33 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     )?;
 
     println!("Initialized distro tree at {}", out.display());
+    Ok(())
+}
+
+fn prepare_host() -> Result<()> {
+    ensure_root()?;
+    let packages = [
+        "build-essential",
+        "pkg-config",
+        "git",
+        "curl",
+        "debootstrap",
+        "rsync",
+        "xorriso",
+        "grub-pc-bin",
+        "grub-efi-amd64-bin",
+        "grub-common",
+        "mtools",
+        "squashfs-tools",
+        "casper",
+        "dosfstools",
+        "parted",
+    ];
+    run("apt-get", ["update"])?;
+    let mut args = vec!["install", "-y"];
+    args.extend(packages);
+    run("apt-get", args)?;
+    println!("Ubuntu 24 remaster host dependencies installed.");
     Ok(())
 }
 
@@ -215,6 +289,9 @@ fn check_tools() -> Result<Vec<&'static str>> {
         "update-grub",
         "lsblk",
         "dd",
+        "parted",
+        "mkfs.ext4",
+        "mkfs.fat",
     ];
 
     let missing: Vec<_> = tools
@@ -231,11 +308,13 @@ fn check_tools() -> Result<Vec<&'static str>> {
     Ok(tools.to_vec())
 }
 
-fn build_iso(tree: &Path) -> Result<()> {
+fn build_iso(tree: &Path, prompt_usb: bool, usb_device: Option<&Path>, system_mode: BootMode) -> Result<()> {
     ensure_root()?;
     check_tools()?;
 
     let config = load_config(tree)?;
+    let system_scan = scan_system()?;
+    let partition_plan = plan_partitions(system_scan.clone(), system_mode, 256);
     let build_root = tree.join("build/rootfs");
     let iso_root = tree.join("build/iso");
     let live_root = iso_root.join("live");
@@ -243,6 +322,14 @@ fn build_iso(tree: &Path) -> Result<()> {
     for dir in [&build_root, &iso_root, &live_root, &tree.join("output")] {
         fs::create_dir_all(dir)?;
     }
+    fs::write(
+        tree.join("build/system-profile.json"),
+        serde_json::to_string_pretty(&system_scan)?,
+    )?;
+    fs::write(
+        tree.join("build/partition-plan.json"),
+        serde_json::to_string_pretty(&partition_plan)?,
+    )?;
 
     run(
         "debootstrap",
@@ -268,8 +355,9 @@ fn build_iso(tree: &Path) -> Result<()> {
     }
 
     let package_script = format!(
-        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y casper grub-pc-bin grub-efi-amd64-bin linux-generic {}",
-        config.package_sets.join(" ")
+        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y casper grub-pc-bin grub-efi-amd64-bin linux-generic {} {}",
+        config.package_sets.join(" "),
+        config.extra_packages.join(" ")
     );
     let chroot_cmd = format!("chroot {} /bin/bash -lc {:?}", path_str(&build_root)?, package_script);
     run_shell(&chroot_cmd)?;
@@ -286,7 +374,14 @@ fn build_iso(tree: &Path) -> Result<()> {
     let output_iso = tree.join("output").join(&config.iso_name);
     run(
         "grub-mkrescue",
-        [path_str(&iso_root)?, "-o", path_str(&output_iso)?],
+        [
+            path_str(&iso_root)?,
+            "-o",
+            path_str(&output_iso)?,
+            "--",
+            "-volid",
+            config.volume_id.as_str(),
+        ],
     )?;
 
     for (_, dst) in mounts.iter().rev() {
@@ -294,6 +389,12 @@ fn build_iso(tree: &Path) -> Result<()> {
     }
 
     println!("ISO created at {}", output_iso.display());
+    if let Some(device) = usb_device {
+        write_usb(&output_iso, device)?;
+    } else if prompt_usb && prompt_yes_no("Write ISO to a USB device now?")? {
+        let device = prompt_line("Enter the target device path (for example /dev/sdb): ")?;
+        write_usb(&output_iso, Path::new(device.trim()))?;
+    }
     Ok(())
 }
 
@@ -384,6 +485,7 @@ fn plan_partitions(scan: SystemScan, mode: BootMode, disk_gb: u64) -> PartitionP
         partitions,
         notes: {
             notes.push("Create swap after root so installs can succeed on smaller disks.".to_string());
+            notes.push(format!("Detected CPU: {} | RAM: {} MB", scan.cpu_model, scan.ram_mb));
             notes
         },
     }
@@ -467,10 +569,18 @@ fn install_branding(tree: &Path, rootfs: &Path, config: &BuildConfig) -> Result<
     .ok();
 
     let issue = format!(
-        "{}\nUbuntu 24.04 remaster with BIOS/UEFI install support.\n",
-        config.distro_name
+        "{}\nUbuntu 24.04 remaster with BIOS/UEFI install support.\n{}\n",
+        config.distro_name,
+        config.performance_goal
     );
     fs::write(rootfs.join("etc/issue"), issue)?;
+    fs::write(
+        rootfs.join("etc/motd"),
+        format!(
+            "{}\nTheme: {}\nGaming shell enabled.\n",
+            config.branding_name, config.theme_name
+        ),
+    )?;
     Ok(())
 }
 
@@ -531,17 +641,21 @@ fn desktop_packages(desktop: &DesktopPreset) -> Vec<String> {
             "ubuntu-standard".to_string(),
             "network-manager".to_string(),
             "sudo".to_string(),
+            "xfce4".to_string(),
+            "lightdm".to_string(),
         ],
         DesktopPreset::Gnome => vec![
             "ubuntu-desktop".to_string(),
             "gnome-shell-extension-manager".to_string(),
             "steam-installer".to_string(),
             "gamemode".to_string(),
+            "gnome-tweaks".to_string(),
         ],
         DesktopPreset::Kde => vec![
             "kubuntu-desktop".to_string(),
             "steam-installer".to_string(),
             "gamemode".to_string(),
+            "plasma-workspace-wayland".to_string(),
         ],
     }
 }
@@ -552,6 +666,41 @@ fn default_theme_css(name: &str, accent: &str) -> String {
     )
 }
 
+fn default_wallpaper_svg(name: &str, accent: &str) -> String {
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1920 1080\"><defs><linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0%\" stop-color=\"#05070d\"/><stop offset=\"100%\" stop-color=\"#101f35\"/></linearGradient></defs><rect width=\"1920\" height=\"1080\" fill=\"url(#bg)\"/><circle cx=\"1510\" cy=\"190\" r=\"220\" fill=\"{accent}\" fill-opacity=\"0.18\"/><circle cx=\"260\" cy=\"880\" r=\"260\" fill=\"#ff5e00\" fill-opacity=\"0.14\"/><text x=\"120\" y=\"860\" fill=\"#eef7ff\" font-size=\"124\" font-family=\"Orbitron, sans-serif\">{name}</text><text x=\"128\" y=\"930\" fill=\"{accent}\" font-size=\"40\" font-family=\"Rajdhani, sans-serif\">Kali-inspired gaming shell for Ubuntu 24.04 remastering</text></svg>"
+    )
+}
+
+fn grub_theme_txt(name: &str, accent: &str) -> String {
+    format!(
+        "title-text: \"{name}\"\ntitle-font: \"DejaVu Sans Bold 28\"\ntitle-color: \"255,255,255\"\nmessage-font: \"DejaVu Sans 16\"\nmessage-color: \"18,247,255\"\ndesktop-image: \"/boot/grub/themes/aurora/background.png\"\nprogress-bar-fg-color: \"18,247,255\"\nprogress-bar-bg-color: \"16,28,43\"\nselected-item-color: \"255,94,0\"\n"
+    )
+}
+
+fn plymouth_theme_metadata(theme_name: &str) -> String {
+    format!(
+        "[Plymouth Theme]\nName={theme_name}\nDescription=Neon gaming boot splash for AURORA remaster\nModuleName=script\n"
+    )
+}
+
+fn plymouth_theme_script(name: &str, accent: &str) -> String {
+    format!(
+        "Window.SetBackgroundTopColor (0.02, 0.03, 0.06);\nWindow.SetBackgroundBottomColor (0.03, 0.08, 0.15);\nlabel = Image.Text(\"{name}\", 1, 1, 1);\nlabel.SetX(Window.GetWidth() / 2 - label.GetWidth() / 2);\nlabel.SetY(Window.GetHeight() / 2 - 40);\nsub = Image.Text(\"Gaming Performance Shell\", {r}, {g}, {b});\nsub.SetX(Window.GetWidth() / 2 - sub.GetWidth() / 2);\nsub.SetY(Window.GetHeight() / 2 + 10);\n",
+        r = hex_channel_to_float(accent, 1),
+        g = hex_channel_to_float(accent, 3),
+        b = hex_channel_to_float(accent, 5),
+    )
+}
+
+fn hex_channel_to_float(hex: &str, offset: usize) -> f32 {
+    let channel = hex
+        .get(offset..offset + 2)
+        .and_then(|value| u8::from_str_radix(value, 16).ok())
+        .unwrap_or(255);
+    channel as f32 / 255.0
+}
+
 fn ensure_root() -> Result<()> {
     #[cfg(target_family = "unix")]
     {
@@ -560,6 +709,22 @@ fn ensure_root() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn prompt_yes_no(prompt: &str) -> Result<bool> {
+    println!("{prompt} [y/N]");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    Ok(matches!(input.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+}
+
+fn prompt_line(prompt: &str) -> Result<String> {
+    print!("{prompt}");
+    use std::io::Write;
+    std::io::stdout().flush()?;
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    Ok(input)
 }
 
 fn command_exists(cmd: &str) -> bool {
