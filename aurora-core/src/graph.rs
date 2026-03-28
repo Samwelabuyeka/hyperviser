@@ -1,12 +1,11 @@
 //! Compute graph for operation fusion and optimization
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use crate::tensor::Tensor;
 use crate::kernel::KernelType;
 
 /// Unique node identifier in a compute graph
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u64);
 
 impl NodeId {
@@ -17,7 +16,7 @@ impl NodeId {
 }
 
 /// Operation type for graph nodes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum OpType {
     /// Input tensor
     Input {
@@ -107,7 +106,7 @@ pub enum OpType {
 }
 
 /// Attribute value for operation attributes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum AttrValue {
     /// Integer attribute
     Int(i64),
@@ -126,7 +125,7 @@ pub enum AttrValue {
 }
 
 /// Compute graph node
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Node {
     /// Node ID
     pub id: NodeId,
@@ -197,7 +196,7 @@ impl Node {
 }
 
 /// Compute graph for operation scheduling
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct ComputeGraph {
     /// Graph nodes
     nodes: HashMap<NodeId, Node>,

@@ -4,7 +4,7 @@
 
 #![warn(missing_docs)]
 
-use aurora_core::error::Result;
+use aurora_core::error::{AuroraError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -69,7 +69,8 @@ impl AutoTuner {
     
     /// Save tuning cache
     pub fn save_cache(&self, path: &str) -> Result<()> {
-        let json = serde_json::to_string_pretty(&self.cache)?;
+        let json = serde_json::to_string_pretty(&self.cache)
+            .map_err(|e| AuroraError::AutotuneError(e.to_string()))?;
         std::fs::write(path, json)?;
         Ok(())
     }
@@ -77,7 +78,8 @@ impl AutoTuner {
     /// Load tuning cache
     pub fn load_cache(&mut self, path: &str) -> Result<()> {
         let content = std::fs::read_to_string(path)?;
-        self.cache = serde_json::from_str(&content)?;
+        self.cache = serde_json::from_str(&content)
+            .map_err(|e| AuroraError::AutotuneError(e.to_string()))?;
         Ok(())
     }
 }

@@ -1,7 +1,5 @@
 //! Common types and utilities
 
-use std::ops::{Add, Mul, Sub, Div};
-
 /// Generic scalar type for tensor operations
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Scalar {
@@ -36,7 +34,7 @@ impl Scalar {
     pub fn as_f32(&self) -> f32 {
         match self {
             Scalar::F32(v) => *v,
-            Scalar::F16(v) => f16::from_bits(*v).to_f32(),
+            Scalar::F16(v) => f16::to_f32(*v),
             Scalar::F64(v) => *v as f32,
             Scalar::I8(v) => *v as f32,
             Scalar::I16(v) => *v as f32,
@@ -54,7 +52,7 @@ impl Scalar {
     pub fn as_f64(&self) -> f64 {
         match self {
             Scalar::F32(v) => *v as f64,
-            Scalar::F16(v) => f16::from_bits(*v).to_f64(),
+            Scalar::F16(v) => f16::to_f64(*v),
             Scalar::F64(v) => *v,
             Scalar::I8(v) => *v as f64,
             Scalar::I16(v) => *v as f64,
@@ -72,7 +70,7 @@ impl Scalar {
     pub fn as_i64(&self) -> i64 {
         match self {
             Scalar::F32(v) => *v as i64,
-            Scalar::F16(v) => f16::from_bits(*v).to_f32() as i64,
+            Scalar::F16(v) => f16::to_f32(*v) as i64,
             Scalar::F64(v) => *v as i64,
             Scalar::I8(v) => *v as i64,
             Scalar::I16(v) => *v as i64,
@@ -109,7 +107,7 @@ impl Scalar {
     pub fn one(dtype: super::tensor::DataType) -> Self {
         match dtype {
             super::tensor::DataType::F32 => Scalar::F32(1.0),
-            super::tensor::DataType::F16 => Scalar::F16(f16::from_f32(1.0).to_bits()),
+            super::tensor::DataType::F16 => Scalar::F16(f16::from_f32(1.0)),
             super::tensor::DataType::BF16 => Scalar::F16(half::bf16::from_f32(1.0).to_bits()),
             super::tensor::DataType::F64 => Scalar::F64(1.0),
             super::tensor::DataType::I8 => Scalar::I8(1),
@@ -129,7 +127,7 @@ impl Scalar {
 pub type Dim = usize;
 
 /// Index type for tensor access
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Index(pub Vec<usize>);
 
 impl Index {

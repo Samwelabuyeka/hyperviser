@@ -15,7 +15,8 @@ use aurora_core::error::Result;
 use aurora_profiler::cpu::CpuInfo;
 use tracing::info;
 
-pub use simd::{SimdLevel, SimdDispatcher, VectorOps, ScalarOps, Sse2Ops, AvxOps, Avx2Ops, Avx512Ops};
+pub use aurora_core::device::SimdLevel;
+pub use simd::{SimdDispatcher, VectorOps, ScalarOps, Sse2Ops, AvxOps, Avx2Ops, Avx512Ops};
 pub use thread_pool::{ThreadPool, Task, TaskId};
 
 /// CPU compute engine

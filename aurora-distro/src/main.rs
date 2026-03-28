@@ -36,6 +36,8 @@ enum Commands {
     ScanSystem,
     /// Generate a partition plan based on host firmware and requested disk size.
     PlanPartitions {
+        #[arg(long, value_enum, default_value = "auto")]
+        mode: BootMode,
         #[arg(long, default_value_t = 256)]
         disk_gb: u64,
     },
@@ -65,10 +67,22 @@ enum DesktopPreset {
     Kde,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+enum BootMode {
+    Auto,
+    Legacy,
+    Uefi,
+    Both,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct BuildConfig {
     distro_name: String,
     iso_name: String,
+    volume_id: String,
+    branding_name: String,
+    logo_path: String,
     ubuntu_release: String,
     ubuntu_mirror: String,
     arch: String,
@@ -76,22 +90,18 @@ struct BuildConfig {
     package_sets: Vec<String>,
     bios_legacy: bool,
     uefi: bool,
+    kali_like_theme: bool,
     theme_name: String,
     accent_color: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SystemScan {
-    firmware: FirmwareMode,
+    firmware: BootMode,
     architecture: String,
+    cpu_model: String,
+    ram_mb: u64,
     disks: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum FirmwareMode {
-    Bios,
-    Uefi,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,8 +114,9 @@ struct Partition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PartitionPlan {
-    firmware: FirmwareMode,
+    firmware: BootMode,
     partitions: Vec<Partition>,
+    notes: Vec<String>,
 }
 
 fn main() -> Result<()> {
@@ -122,10 +133,10 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&scan_system()?)?);
             Ok(())
         }
-        Commands::PlanPartitions { disk_gb } => {
+        Commands::PlanPartitions { mode, disk_gb } => {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&plan_partitions(scan_system()?, disk_gb))?
+                serde_json::to_string_pretty(&plan_partitions(scan_system()?, mode, disk_gb))?
             );
             Ok(())
         }
@@ -154,6 +165,9 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     let config = BuildConfig {
         distro_name: distro_name.to_string(),
         iso_name: format!("{}-24.04-live.iso", distro_name.to_lowercase().replace(' ', "-")),
+        volume_id: format!("{}_2404", distro_name.to_uppercase().replace(' ', "_")),
+        branding_name: distro_name.to_string(),
+        logo_path: "assets/branding/logo.png".to_string(),
         ubuntu_release: "noble".to_string(),
         ubuntu_mirror: "http://archive.ubuntu.com/ubuntu".to_string(),
         arch: "amd64".to_string(),
@@ -161,6 +175,7 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         package_sets: desktop_packages(&desktop),
         bios_legacy: true,
         uefi: true,
+        kali_like_theme: true,
         theme_name: "Aurora Neon Assault".to_string(),
         accent_color: "#12f7ff".to_string(),
     };
@@ -172,6 +187,10 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     fs::write(
         out.join("assets/theme/theme.css"),
         default_theme_css(&config.distro_name, &config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/etc/default/grub"),
+        "GRUB_TIMEOUT=5\nGRUB_GFXMODE=1920x1080\nGRUB_THEME=/boot/grub/themes/aurora/theme.txt\n",
     )?;
     fs::write(
         out.join("assets/branding/README.md"),
@@ -280,19 +299,34 @@ fn build_iso(tree: &Path) -> Result<()> {
 
 fn scan_system() -> Result<SystemScan> {
     let firmware = if Path::new("/sys/firmware/efi").exists() {
-        FirmwareMode::Uefi
+        BootMode::Uefi
     } else {
-        FirmwareMode::Bios
+        BootMode::Legacy
     };
 
+    let cpu_model = fs::read_to_string("/proc/cpuinfo")
+        .unwrap_or_default()
+        .lines()
+        .find(|line| line.starts_with("model name"))
+        .and_then(|line| line.split(':').nth(1))
+        .map(|line| line.trim().to_string())
+        .unwrap_or_else(|| "Unknown CPU".to_string());
+    let ram_mb = fs::read_to_string("/proc/meminfo")
+        .unwrap_or_default()
+        .lines()
+        .find(|line| line.starts_with("MemTotal:"))
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(|kb| kb / 1024)
+        .unwrap_or(0);
     let disks = if command_exists("lsblk") {
         let output = Command::new("lsblk")
-            .args(["-dn", "-o", "NAME"])
+            .args(["-dn", "-o", "NAME,SIZE,MODEL"])
             .output()
             .context("failed to run lsblk")?;
         String::from_utf8_lossy(&output.stdout)
             .lines()
-            .map(|line| format!("/dev/{}", line.trim()))
+            .map(|line| line.trim().to_string())
             .filter(|line| !line.is_empty())
             .collect()
     } else {
@@ -302,20 +336,28 @@ fn scan_system() -> Result<SystemScan> {
     Ok(SystemScan {
         firmware,
         architecture: std::env::consts::ARCH.to_string(),
+        cpu_model,
+        ram_mb,
         disks,
     })
 }
 
-fn plan_partitions(scan: SystemScan, disk_gb: u64) -> PartitionPlan {
+fn plan_partitions(scan: SystemScan, mode: BootMode, disk_gb: u64) -> PartitionPlan {
+    let firmware = match mode {
+        BootMode::Auto => scan.firmware,
+        other => other,
+    };
     let mut partitions = Vec::new();
-    if matches!(scan.firmware, FirmwareMode::Uefi) {
+    let mut notes = vec!["Use GPT when targeting UEFI or dual-boot firmware support.".to_string()];
+    if matches!(firmware, BootMode::Uefi | BootMode::Both) {
         partitions.push(Partition {
             label: "EFI".to_string(),
             fs: "fat32".to_string(),
             size_mb: 512,
             mountpoint: "/boot/efi".to_string(),
         });
-    } else {
+    }
+    if matches!(firmware, BootMode::Legacy | BootMode::Both) {
         partitions.push(Partition {
             label: "BIOS_GRUB".to_string(),
             fs: "bios_grub".to_string(),
@@ -338,8 +380,12 @@ fn plan_partitions(scan: SystemScan, disk_gb: u64) -> PartitionPlan {
     });
 
     PartitionPlan {
-        firmware: scan.firmware,
+        firmware,
         partitions,
+        notes: {
+            notes.push("Create swap after root so installs can succeed on smaller disks.".to_string());
+            notes
+        },
     }
 }
 
@@ -466,7 +512,7 @@ fn write_grub_cfg(iso_root: &Path, config: &BuildConfig) -> Result<()> {
     fs::create_dir_all(&grub_dir)?;
     let cfg = format!(
         "set default=0\nset timeout=5\nmenuentry \"{} Live\" {{\n linux /live/vmlinuz boot=casper quiet splash ---\n initrd /live/initrd\n}}\n",
-        config.distro_name
+        config.branding_name
     );
     fs::write(grub_dir.join("grub.cfg"), cfg)?;
     Ok(())
