@@ -15,6 +15,7 @@ aurora-core = { path = "../aurora-core" }
 raw-cpuid = { workspace = true }
 sysinfo = { workspace = true }
 libc = { workspace = true }
+num_cpus = { workspace = true }
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }

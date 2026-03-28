@@ -5,10 +5,6 @@
 #![warn(missing_docs)]
 
 use aurora_core::device::DeviceId;
-use aurora_core::error::Result;
-use aurora_core::graph::ComputeGraph;
-use aurora_core::kernel::KernelType;
-use aurora_core::tensor::{Tensor, TensorShape, DataType};
 use aurora_profiler::profile::HardwareProfile;
 
 /// AURORA runtime handle
@@ -37,16 +33,16 @@ impl AuroraRuntime {
     /// Execute a kernel
     pub fn execute_kernel(
         &self,
-        kernel_type: KernelType,
-        inputs: &[&Tensor],
-        output: &mut Tensor,
+        _kernel_type: KernelType,
+        _inputs: &[&Tensor],
+        _output: &mut Tensor,
     ) -> Result<()> {
         // Placeholder - would execute kernel
         Ok(())
     }
     
     /// Execute a compute graph
-    pub fn execute_graph(&self, graph: &ComputeGraph) -> Result<Vec<Tensor>> {
+    pub fn execute_graph(&self, _graph: &ComputeGraph) -> Result<Vec<Tensor>> {
         // Placeholder - would execute graph
         Ok(vec![])
     }

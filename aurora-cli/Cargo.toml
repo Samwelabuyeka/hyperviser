@@ -30,10 +30,13 @@ tokio = { workspace = true }
 
 # Error handling
 anyhow = { workspace = true }
+libc = { workspace = true }
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sysinfo = { workspace = true }
+rustc_version_runtime = { workspace = true }
 
 # Terminal
 colored = "2.1"
