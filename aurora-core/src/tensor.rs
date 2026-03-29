@@ -202,8 +202,18 @@ impl TensorShape {
         let mut result_dims = Vec::with_capacity(max_ndim);
         
         for i in 0..max_ndim {
-            let d1 = self.dim(self.ndim().saturating_sub(max_ndim - i)).unwrap_or(1);
-            let d2 = other.dim(other.ndim().saturating_sub(max_ndim - i)).unwrap_or(1);
+            let self_idx = self.ndim() as isize - max_ndim as isize + i as isize;
+            let other_idx = other.ndim() as isize - max_ndim as isize + i as isize;
+            let d1 = if self_idx >= 0 {
+                self.dim(self_idx as usize).unwrap_or(1)
+            } else {
+                1
+            };
+            let d2 = if other_idx >= 0 {
+                other.dim(other_idx as usize).unwrap_or(1)
+            } else {
+                1
+            };
             
             if d1 != d2 && d1 != 1 && d2 != 1 {
                 return Err(AuroraError::shape_mismatch(self.dims.clone(), other.dims.clone()));

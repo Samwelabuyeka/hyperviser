@@ -153,7 +153,8 @@ impl ThreadPool {
             let _ = tx.send(result);
         });
         
-        rx.recv().map_err(|_| AuroraError::invalid_arg("Task execution failed"))
+        rx.recv()
+            .map_err(|_| AuroraError::invalid_arg("Task execution failed"))?
     }
     
     /// Execute a function in parallel across all workers

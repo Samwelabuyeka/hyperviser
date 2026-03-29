@@ -882,7 +882,7 @@ impl VectorOps for Avx512Ops {
 mod tests {
     use super::*;
 
-    fn test_vector_ops<V: VectorOps>(ops: &V) {
+    fn test_vector_ops<V: VectorOps + ?Sized>(ops: &V) {
         let a = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
         let b = vec![2.0f32, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut c = vec![0.0f32; 8];

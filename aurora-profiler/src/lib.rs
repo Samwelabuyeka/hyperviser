@@ -189,6 +189,16 @@ mod tests {
     #[test]
     fn test_profiler_creation() {
         let profiler = HardwareProfiler::new();
-        assert!(!profiler.cpu().features().is_empty());
+        let features = profiler.cpu().features();
+        assert!(
+            features.sse2
+                || features.sse3
+                || features.ssse3
+                || features.sse4_1
+                || features.sse4_2
+                || features.avx
+                || features.avx2
+                || features.has_avx512()
+        );
     }
 }

@@ -30,15 +30,30 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Build information
 pub mod build_info {
     /// Git commit hash
-    pub const GIT_COMMIT: &str = option_env!("GIT_COMMIT").unwrap_or("unknown");
+    pub const GIT_COMMIT: &str = match option_env!("GIT_COMMIT") {
+        Some(value) => value,
+        None => "unknown",
+    };
     /// Build timestamp
-    pub const BUILD_TIME: &str = option_env!("BUILD_TIME").unwrap_or("unknown");
+    pub const BUILD_TIME: &str = match option_env!("BUILD_TIME") {
+        Some(value) => value,
+        None => "unknown",
+    };
     /// Target architecture
-    pub const TARGET: &str = option_env!("TARGET").unwrap_or("unknown");
+    pub const TARGET: &str = match option_env!("TARGET") {
+        Some(value) => value,
+        None => "unknown",
+    };
     /// Build profile
-    pub const PROFILE: &str = option_env!("PROFILE").unwrap_or("unknown");
+    pub const PROFILE: &str = match option_env!("PROFILE") {
+        Some(value) => value,
+        None => "unknown",
+    };
     /// Rust version
-    pub const RUST_VERSION: &str = option_env!("RUSTC_VERSION").unwrap_or("unknown");
+    pub const RUST_VERSION: &str = match option_env!("RUSTC_VERSION") {
+        Some(value) => value,
+        None => "unknown",
+    };
 }
 
 static INITIALIZED: AtomicBool = AtomicBool::new(false);

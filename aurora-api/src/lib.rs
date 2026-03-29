@@ -4,7 +4,6 @@
 
 #![warn(missing_docs)]
 
-use aurora_core::device::DeviceId;
 use aurora_profiler::profile::HardwareProfile;
 
 /// AURORA runtime handle
@@ -27,7 +26,12 @@ impl AuroraRuntime {
     /// Create a tensor
     pub fn create_tensor(&self, shape: TensorShape, dtype: DataType) -> Result<Tensor> {
         let id = 1; // Would be generated
-        Ok(Tensor::new(id, shape, dtype, DeviceId::CPU))
+        Ok(Tensor::new(
+            id,
+            shape,
+            dtype,
+            aurora_core::device::DeviceId::CPU,
+        ))
     }
     
     /// Execute a kernel
