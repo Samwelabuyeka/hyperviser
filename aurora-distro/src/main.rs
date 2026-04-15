@@ -83,9 +83,12 @@ enum AppSurface {
     Installer,
     ControlCenter,
     AiHub,
+    DevLab,
+    CreatorStudio,
     GamingCenter,
     SecurityCenter,
     PackageCenter,
+    Andromeda,
     Welcome,
 }
 
@@ -112,7 +115,23 @@ enum BootMode {
 enum InstallMode {
     Balanced,
     Gaming,
+    Creator,
+    Training,
+    Datacenter,
     MaxThroughput,
+}
+
+impl InstallMode {
+    fn slug(self) -> &'static str {
+        match self {
+            InstallMode::Balanced => "balanced",
+            InstallMode::Gaming => "gaming",
+            InstallMode::Creator => "creator",
+            InstallMode::Training => "training",
+            InstallMode::Datacenter => "datacenter",
+            InstallMode::MaxThroughput => "max-throughput",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,9 +294,12 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         out.join("overlay/usr/share/aurora/installer"),
         out.join("overlay/usr/share/aurora/control-center"),
         out.join("overlay/usr/share/aurora/ai-hub"),
+        out.join("overlay/usr/share/aurora/dev-lab"),
+        out.join("overlay/usr/share/aurora/creator-studio"),
         out.join("overlay/usr/share/aurora/gaming-center"),
         out.join("overlay/usr/share/aurora/security-center"),
         out.join("overlay/usr/share/aurora/package-center"),
+        out.join("overlay/usr/share/aurora/andromeda"),
         out.join("overlay/usr/share/aurora/welcome"),
         out.join("overlay/usr/share/aurora/archive"),
         out.join("overlay/usr/share/themes/Aurora-Neon/gtk-3.0"),
@@ -342,10 +364,28 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
             "fprintd".to_string(),
             "ollama".to_string(),
             "copyq".to_string(),
+            "podman".to_string(),
+            "distrobox".to_string(),
+            "virt-manager".to_string(),
+            "qemu-system-x86".to_string(),
+            "libvirt-daemon-system".to_string(),
+            "bridge-utils".to_string(),
+            "dnsmasq-base".to_string(),
             "gamescope".to_string(),
             "goverlay".to_string(),
             "mesa-vulkan-drivers".to_string(),
             "mesa-utils".to_string(),
+            "obs-studio".to_string(),
+            "gimp".to_string(),
+            "inkscape".to_string(),
+            "ffmpeg".to_string(),
+            "libreoffice".to_string(),
+            "git-lfs".to_string(),
+            "tmux".to_string(),
+            "direnv".to_string(),
+            "shellcheck".to_string(),
+            "hyperfine".to_string(),
+            "wireshark".to_string(),
             "libspa-0.2-bluetooth".to_string(),
             "valkey-server".to_string(),
             "kdump-tools".to_string(),
@@ -372,6 +412,24 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
             "silversearcher-ag".to_string(),
             "fzf".to_string(),
             "jq".to_string(),
+            "python3-venv".to_string(),
+            "python3-pip".to_string(),
+            "python3-dev".to_string(),
+            "blender".to_string(),
+            "krita".to_string(),
+            "kdenlive".to_string(),
+            "audacity".to_string(),
+            "sysstat".to_string(),
+            "dstat".to_string(),
+            "iotop".to_string(),
+            "fio".to_string(),
+            "nvme-cli".to_string(),
+            "prometheus-node-exporter".to_string(),
+            "bpfcc-tools".to_string(),
+            "tor".to_string(),
+            "torsocks".to_string(),
+            "macchanger".to_string(),
+            "usbguard".to_string(),
         ],
         bios_legacy: true,
         uefi: true,
@@ -395,12 +453,18 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         available_modes: vec![
             InstallMode::Balanced,
             InstallMode::Gaming,
+            InstallMode::Creator,
+            InstallMode::Training,
+            InstallMode::Datacenter,
             InstallMode::MaxThroughput,
         ],
         default_mode: InstallMode::Gaming,
     };
     let balanced = performance_profile(InstallMode::Balanced);
     let gaming = performance_profile(InstallMode::Gaming);
+    let creator = performance_profile(InstallMode::Creator);
+    let training = performance_profile(InstallMode::Training);
+    let datacenter = performance_profile(InstallMode::Datacenter);
     let performance = performance_profile(InstallMode::MaxThroughput);
 
     fs::write(
@@ -424,6 +488,18 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         serde_json::to_string_pretty(&gaming)?,
     )?;
     fs::write(
+        out.join("profiles/performance-creator.json"),
+        serde_json::to_string_pretty(&creator)?,
+    )?;
+    fs::write(
+        out.join("profiles/performance-training.json"),
+        serde_json::to_string_pretty(&training)?,
+    )?;
+    fs::write(
+        out.join("profiles/performance-datacenter.json"),
+        serde_json::to_string_pretty(&datacenter)?,
+    )?;
+    fs::write(
         out.join("profiles/performance-max-throughput.json"),
         serde_json::to_string_pretty(&performance)?,
     )?;
@@ -442,6 +518,10 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     fs::write(
         out.join("overlay/etc/aurora-installer/installer.json"),
         serde_json::to_string_pretty(&installer)?,
+    )?;
+    fs::write(
+        out.join("overlay/etc/aurora-installer/autoinstall.yaml"),
+        autoinstall_yaml(&config, &installer),
     )?;
     fs::write(
         out.join("overlay/etc/aurora-installer/performance-profile.json"),
@@ -480,6 +560,14 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         aurora_ai_hub_desktop_file(),
     )?;
     fs::write(
+        out.join("overlay/usr/share/applications/aurora-dev-lab.desktop"),
+        aurora_dev_lab_desktop_file(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/applications/aurora-creator-studio.desktop"),
+        aurora_creator_studio_desktop_file(),
+    )?;
+    fs::write(
         out.join("overlay/usr/share/applications/aurora-gaming-center.desktop"),
         aurora_gaming_center_desktop_file(),
     )?;
@@ -496,6 +584,10 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         aurora_welcome_desktop_file(),
     )?;
     fs::write(
+        out.join("overlay/usr/share/applications/aurora-andromeda.desktop"),
+        aurora_andromeda_desktop_file(),
+    )?;
+    fs::write(
         out.join("overlay/home/aurora/.config/autostart/aurora-installer.desktop"),
         installer_desktop_file(),
     )?;
@@ -508,8 +600,16 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         aurora_ai_hub_desktop_file(),
     )?;
     fs::write(
+        out.join("overlay/etc/skel/.config/autostart/aurora-dev-lab.desktop"),
+        aurora_dev_lab_desktop_file(),
+    )?;
+    fs::write(
         out.join("overlay/etc/skel/.config/autostart/aurora-welcome.desktop"),
         aurora_welcome_desktop_file(),
+    )?;
+    fs::write(
+        out.join("overlay/etc/skel/.config/autostart/aurora-andromeda.desktop"),
+        aurora_andromeda_desktop_file(),
     )?;
     fs::write(
         out.join("overlay/home/aurora/.config/autostart/aurora-control-center.desktop"),
@@ -520,8 +620,16 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         aurora_ai_hub_desktop_file(),
     )?;
     fs::write(
+        out.join("overlay/home/aurora/.config/autostart/aurora-dev-lab.desktop"),
+        aurora_dev_lab_desktop_file(),
+    )?;
+    fs::write(
         out.join("overlay/home/aurora/.config/autostart/aurora-welcome.desktop"),
         aurora_welcome_desktop_file(),
+    )?;
+    fs::write(
+        out.join("overlay/home/aurora/.config/autostart/aurora-andromeda.desktop"),
+        aurora_andromeda_desktop_file(),
     )?;
     fs::write(
         out.join("overlay/usr/local/bin/aurora-firstboot"),
@@ -540,12 +648,44 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         ai_setup_script(),
     )?;
     fs::write(
+        out.join("overlay/usr/local/bin/aurora-dev-setup"),
+        dev_setup_script(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-creator-setup"),
+        creator_setup_script(),
+    )?;
+    fs::write(
         out.join("overlay/usr/local/bin/aurora-gaming-setup"),
         gaming_setup_script(),
     )?;
     fs::write(
+        out.join("overlay/usr/local/bin/aurora-gpu-setup"),
+        gpu_setup_script(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-ai-helper"),
+        ai_helper_script(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-privacy-setup"),
+        privacy_setup_script(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-training-setup"),
+        training_setup_script(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-datacenter-setup"),
+        datacenter_setup_script(),
+    )?;
+    fs::write(
         out.join("overlay/usr/local/bin/aurora-security-setup"),
         security_setup_script(),
+    )?;
+    fs::write(
+        out.join("overlay/usr/local/bin/aurora-hardware-guard"),
+        hardware_guard_script(),
     )?;
     fs::write(
         out.join("overlay/usr/local/bin/aurora-apt"),
@@ -564,6 +704,10 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         autosetup_service(),
     )?;
     fs::write(
+        out.join("overlay/etc/systemd/system/aurora-inference.service"),
+        aurora_inference_service(),
+    )?;
+    fs::write(
         out.join("overlay/etc/systemd/system/aurora-zram-setup.service"),
         zram_service(),
     )?;
@@ -578,6 +722,10 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     fs::write(
         out.join("overlay/usr/share/aurora/installer/installer.js"),
         installer_js(&installer),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/installer/autoinstall.yaml"),
+        autoinstall_yaml(&config, &installer),
     )?;
     fs::write(
         out.join("overlay/usr/share/aurora/control-center/index.html"),
@@ -598,6 +746,22 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
     fs::write(
         out.join("overlay/usr/share/aurora/ai-hub/ai-hub.css"),
         ai_hub_css(&config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/dev-lab/index.html"),
+        dev_lab_html(&config.branding_name, &config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/dev-lab/dev-lab.css"),
+        dev_lab_css(&config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/creator-studio/index.html"),
+        creator_studio_html(&config.branding_name, &config.accent_color),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/creator-studio/creator-studio.css"),
+        creator_studio_css(&config.accent_color),
     )?;
     fs::write(
         out.join("overlay/usr/share/aurora/gaming-center/index.html"),
@@ -624,6 +788,14 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         package_center_css(&config.accent_color),
     )?;
     fs::write(
+        out.join("overlay/usr/share/aurora/andromeda/index.html"),
+        andromeda_html(&config.branding_name),
+    )?;
+    fs::write(
+        out.join("overlay/usr/share/aurora/andromeda/andromeda.css"),
+        andromeda_css(&config.accent_color),
+    )?;
+    fs::write(
         out.join("overlay/usr/share/aurora/archive/catalog.json"),
         aurora_archive_catalog_json(&config)?,
     )?;
@@ -648,6 +820,8 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
                 "aurora-control-center",
                 "aurora-app-center",
                 "aurora-welcome",
+                "aurora-dev-lab",
+                "aurora-creator-studio",
                 "aurora-gaming-center",
                 "aurora-security-center",
                 "aurora-ai-hub",
@@ -678,8 +852,37 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         aurora_meta_package_control(
             "aurora-creator-stack",
             &config,
-            &["vlc", "flatpak", "gnome-software-plugin-flatpak", "zellij", "bottom", "just"],
+            &[
+                "vlc",
+                "flatpak",
+                "gnome-software-plugin-flatpak",
+                "obs-studio",
+                "ffmpeg",
+                "gimp",
+                "inkscape",
+                "libreoffice",
+                "aurora-creator-studio",
+            ],
             "Aurora creator and workstation stack with media, packaging, and terminal productivity tooling.",
+        ),
+    )?;
+    fs::write(
+        out.join("overlay/opt/aurora/repo/meta/aurora-dev-stack.control"),
+        aurora_meta_package_control(
+            "aurora-dev-stack",
+            &config,
+            &[
+                "aurora-dev-lab",
+                "git",
+                "git-lfs",
+                "podman",
+                "distrobox",
+                "tmux",
+                "direnv",
+                "shellcheck",
+                "hyperfine",
+            ],
+            "Aurora development stack with containers, CLI tooling, shell quality checks, and workspace automation.",
         ),
     )?;
     fs::write(
@@ -692,6 +895,15 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         ),
     )?;
     fs::write(
+        out.join("overlay/opt/aurora/repo/meta/aurora-privacy-stack.control"),
+        aurora_meta_package_control(
+            "aurora-privacy-stack",
+            &config,
+            &["tor", "torsocks", "macchanger", "usbguard"],
+            "Aurora privacy stack with MAC randomization posture, Tor tooling, and device access hardening.",
+        ),
+    )?;
+    fs::write(
         out.join("overlay/opt/aurora/repo/meta/aurora-scientific-stack.control"),
         aurora_meta_package_control(
             "aurora-scientific-stack",
@@ -701,8 +913,26 @@ fn init_tree(out: &Path, distro_name: &str, desktop: DesktopPreset) -> Result<()
         ),
     )?;
     fs::write(
+        out.join("overlay/opt/aurora/repo/meta/aurora-training-stack.control"),
+        aurora_meta_package_control(
+            "aurora-training-stack",
+            &config,
+            &["python3-venv", "python3-pip", "python3-dev", "numactl", "hwloc", "valkey-server", "fio"],
+            "Aurora training stack with Python environments, NUMA tooling, cache services, and dataset throughput helpers.",
+        ),
+    )?;
+    fs::write(
+        out.join("overlay/opt/aurora/repo/meta/aurora-datacenter-stack.control"),
+        aurora_meta_package_control(
+            "aurora-datacenter-stack",
+            &config,
+            &["sysstat", "dstat", "iotop", "prometheus-node-exporter", "bpfcc-tools", "fio", "nvme-cli"],
+            "Aurora datacenter stack with observability, storage validation, and service-host tuning tools.",
+        ),
+    )?;
+    fs::write(
         out.join("overlay/usr/local/bin/install-aurora-meta"),
-        "#!/usr/bin/env bash\nset -euo pipefail\napt update\napt install -y aurora-desktop aurora-ai-stack aurora-gaming-stack aurora-creator-stack aurora-security-stack aurora-scientific-stack\n".to_string(),
+        "#!/usr/bin/env bash\nset -euo pipefail\napt update\napt install -y aurora-desktop aurora-ai-stack aurora-dev-stack aurora-gaming-stack aurora-creator-stack aurora-security-stack aurora-privacy-stack aurora-scientific-stack aurora-training-stack aurora-datacenter-stack\n".to_string(),
     )?;
     fs::write(
         out.join("overlay/etc/apt/sources.list.d/aurora.sources"),
@@ -766,9 +996,12 @@ fn launch_app(surface: AppSurface, action: Option<&str>) -> Result<()> {
         AppSurface::Installer => installer_app(action),
         AppSurface::ControlCenter => control_center_app(action),
         AppSurface::AiHub => ai_hub_app(action),
+        AppSurface::DevLab => dev_lab_app(action),
+        AppSurface::CreatorStudio => creator_studio_app(action),
         AppSurface::GamingCenter => gaming_center_app(action),
         AppSurface::SecurityCenter => security_center_app(action),
         AppSurface::PackageCenter => package_center_app(action),
+        AppSurface::Andromeda => andromeda_app(action),
         AppSurface::Welcome => welcome_app(action),
     }
 }
@@ -778,7 +1011,7 @@ fn installer_app(action: Option<&str>) -> Result<()> {
     match action {
         "summary" => {
             println!("Aurora Installer");
-            println!("- Modes: balanced, gaming, max-throughput");
+            println!("- Modes: balanced, gaming, creator, training, datacenter, max-throughput");
             println!("- Commands:");
             println!("  aurora-distro app installer --action scan");
             println!("  aurora-distro app installer --action plan");
@@ -814,7 +1047,7 @@ fn control_center_app(action: Option<&str>) -> Result<()> {
             println!("- Security config: {}", Path::new("/etc/default/aurora-performance").exists());
             Ok(())
         }
-        "balanced" | "gaming" | "max-throughput" => {
+        "balanced" | "gaming" | "creator" | "training" | "datacenter" | "max-throughput" => {
             run("/usr/local/bin/aurora-mode-switch", [action.unwrap()])?;
             Ok(())
         }
@@ -839,6 +1072,40 @@ fn ai_hub_app(action: Option<&str>) -> Result<()> {
         }
         "setup" => run("/usr/local/bin/aurora-ai-setup", std::iter::empty::<&str>()),
         other => bail!("unknown ai-hub action: {other}"),
+    }
+}
+
+fn dev_lab_app(action: Option<&str>) -> Result<()> {
+    let action = action.unwrap_or("status");
+    match action {
+        "status" => {
+            println!("Aurora Dev Lab");
+            println!("- Containers: podman + distrobox + libvirt stack");
+            println!("- Shell quality: shellcheck + hyperfine + ripgrep + fd + bat");
+            println!("- Workspace bootstrap: aurora-dev-setup");
+            Ok(())
+        }
+        "setup" => run("/usr/local/bin/aurora-dev-setup", std::iter::empty::<&str>()),
+        other => bail!("unknown dev-lab action: {other}"),
+    }
+}
+
+fn creator_studio_app(action: Option<&str>) -> Result<()> {
+    let action = action.unwrap_or("status");
+    match action {
+        "status" => {
+            println!("Aurora Creator Studio");
+            println!("- Capture: OBS Studio + FFmpeg");
+            println!("- Design: GIMP + Inkscape");
+            println!("- Office: LibreOffice");
+            println!("- Workspace bootstrap: aurora-creator-setup");
+            Ok(())
+        }
+        "setup" => run(
+            "/usr/local/bin/aurora-creator-setup",
+            std::iter::empty::<&str>(),
+        ),
+        other => bail!("unknown creator-studio action: {other}"),
     }
 }
 
@@ -893,6 +1160,18 @@ fn package_center_app(action: Option<&str>) -> Result<()> {
     }
 }
 
+fn andromeda_app(action: Option<&str>) -> Result<()> {
+    match action.unwrap_or("summary") {
+        "summary" => {
+            println!("Aurora Andromeda");
+            println!("- Cinematic interstitial surface for first login.");
+            println!("- Redirects into Aurora Welcome after the short boot-intro sequence.");
+            Ok(())
+        }
+        other => bail!("unknown andromeda action: {other}"),
+    }
+}
+
 fn welcome_app(action: Option<&str>) -> Result<()> {
     match action.unwrap_or("status") {
         "status" => {
@@ -901,6 +1180,8 @@ fn welcome_app(action: Option<&str>) -> Result<()> {
             println!("- Try:");
             println!("  aurora-distro app control-center");
             println!("  aurora-distro app ai-hub --action status");
+            println!("  aurora-distro app dev-lab --action status");
+            println!("  aurora-distro app creator-studio --action status");
             println!("  aurora-distro app gaming-center --action status");
             println!("  aurora-distro app security-center --action status");
             println!("  aurora-distro app package-center --action classify");
@@ -1042,6 +1323,16 @@ fn build_iso(tree: &Path, prompt_usb: bool, usb_device: Option<&Path>, system_mo
     let iso_root = tree.join("build/iso");
     let live_root = iso_root.join("live");
 
+    let reusable_rootfs =
+        build_root.join("var/lib/dpkg/status").exists() && build_root.join("bin/bash").exists();
+    if build_root.exists() && !reusable_rootfs {
+        fs::remove_dir_all(&build_root)
+            .with_context(|| format!("failed to reset {}", build_root.display()))?;
+    }
+    if iso_root.exists() {
+        fs::remove_dir_all(&iso_root)
+            .with_context(|| format!("failed to reset {}", iso_root.display()))?;
+    }
     for dir in [&build_root, &iso_root, &live_root, &tree.join("output")] {
         fs::create_dir_all(dir)?;
     }
@@ -1055,18 +1346,22 @@ fn build_iso(tree: &Path, prompt_usb: bool, usb_device: Option<&Path>, system_mo
     )?;
     write_installer_support(tree, &partition_plan)?;
 
-    run(
-        "debootstrap",
-        [
-            "--arch",
-            config.arch.as_str(),
-            config.ubuntu_release.as_str(),
-            build_root
-                .to_str()
-                .ok_or_else(|| anyhow!("non-utf8 build root path"))?,
-            config.ubuntu_mirror.as_str(),
-        ],
-    )?;
+    if reusable_rootfs {
+        println!("Reusing existing rootfs at {}", build_root.display());
+    } else {
+        run(
+            "debootstrap",
+            [
+                "--arch",
+                config.arch.as_str(),
+                config.ubuntu_release.as_str(),
+                build_root
+                    .to_str()
+                    .ok_or_else(|| anyhow!("non-utf8 build root path"))?,
+                config.ubuntu_mirror.as_str(),
+            ],
+        )?;
+    }
 
     let mounts = [
         ("/dev", build_root.join("dev")),
@@ -1091,63 +1386,65 @@ fn build_iso(tree: &Path, prompt_usb: bool, usb_device: Option<&Path>, system_mo
     ]
     .concat();
     let package_script = format!(
-        "set -euo pipefail\n\
-         exec > >(tee -a /var/log/aurora-package-install.log) 2>&1\n\
-         export DEBIAN_FRONTEND=noninteractive\n\
-         printf 'deb http://archive.ubuntu.com/ubuntu noble main universe multiverse restricted\\n' > /etc/apt/sources.list\n\
-         printf 'deb http://archive.ubuntu.com/ubuntu noble-updates main universe multiverse restricted\\n' >> /etc/apt/sources.list\n\
-         printf 'deb http://archive.ubuntu.com/ubuntu noble-security main universe multiverse restricted\\n' >> /etc/apt/sources.list\n\
-         cat > /etc/apt/apt.conf.d/99aurora-remaster <<'EOF'\n\
- Acquire::Retries \"10\";\n\
- Acquire::http::Timeout \"60\";\n\
- Acquire::https::Timeout \"60\";\n\
- Acquire::ForceIPv4 \"true\";\n\
- Acquire::Languages \"none\";\n\
- Dpkg::Use-Pty \"0\";\n\
- APT::Install-Recommends \"true\";\n\
- APT::Install-Suggests \"false\";\n\
- EOF\n\
-         retry_apt() {{\n\
-           local attempt=1\n\
-           local max_attempts=4\n\
-           until \"$@\"; do\n\
-             if [ \"$attempt\" -ge \"$max_attempts\" ]; then\n\
-               echo \"error: command failed after ${{max_attempts}} attempts: $*\" >&2\n\
-               return 1\n\
-             fi\n\
-             echo \"warning: attempt ${{attempt}} failed for: $*\" >&2\n\
-             apt-get clean || true\n\
-             rm -f /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true\n\
-             dpkg --configure -a || true\n\
-             sleep $((attempt * 10))\n\
-             attempt=$((attempt + 1))\n\
-           done\n\
-         }}\n\
-         retry_apt apt-get update\n\
-         for pkg in {}; do\n\
-           echo \"Installing required package: $pkg\"\n\
-           retry_apt apt-get install -y \"$pkg\"\n\
-         done\n\
-         for pkg in {}; do \
-           if apt-cache show \"$pkg\" >/dev/null 2>&1; then \
-             retry_apt apt-get install -y \"$pkg\" || echo \"warning: optional package failed: $pkg\"; \
-           else \
-             echo \"warning: optional package unavailable: $pkg\"; \
-           fi; \
-         done\n\
-         dpkg --configure -a\n\
-         apt-get clean",
-        shell_words(&required_install_set),
-        shell_words(&optional_packages),
+        r#"set -euo pipefail
+exec > >(tee -a /var/log/aurora-package-install.log) 2>&1
+export DEBIAN_FRONTEND=noninteractive
+printf 'deb http://archive.ubuntu.com/ubuntu noble main universe multiverse restricted\n' > /etc/apt/sources.list
+printf 'deb http://archive.ubuntu.com/ubuntu noble-updates main universe multiverse restricted\n' >> /etc/apt/sources.list
+printf 'deb http://archive.ubuntu.com/ubuntu noble-security main universe multiverse restricted\n' >> /etc/apt/sources.list
+cat > /etc/apt/apt.conf.d/99aurora-remaster <<'EOF'
+Acquire::Retries "10";
+Acquire::http::Timeout "60";
+Acquire::https::Timeout "60";
+Acquire::ForceIPv4 "true";
+Acquire::Languages "none";
+Dpkg::Use-Pty "0";
+APT::Install-Recommends "true";
+APT::Install-Suggests "false";
+EOF
+retry_apt() {{
+  local attempt=1
+  local max_attempts=4
+  until "$@"; do
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      echo "error: command failed after ${{max_attempts}} attempts: $*" >&2
+      return 1
+    fi
+    echo "warning: attempt ${{attempt}} failed for: $*" >&2
+    apt-get clean || true
+    rm -f /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+    dpkg --configure -a || true
+    sleep $((attempt * 10))
+    attempt=$((attempt + 1))
+  done
+}}
+retry_apt apt-get update
+for pkg in {required}; do
+  echo "Installing required package: $pkg"
+  retry_apt apt-get install -y "$pkg"
+done
+for pkg in {optional}; do
+  if apt-cache show "$pkg" >/dev/null 2>&1; then
+    retry_apt apt-get install -y "$pkg" || echo "warning: optional package failed: $pkg"
+  else
+    echo "warning: optional package unavailable: $pkg"
+  fi
+done
+dpkg --configure -a
+apt-get clean"#,
+        required = shell_words(&required_install_set),
+        optional = shell_words(&optional_packages),
     );
-    let chroot_cmd = format!("chroot {} /bin/bash -lc {:?}", path_str(&build_root)?, package_script);
-    run_shell(&chroot_cmd)?;
+    run("chroot", [path_str(&build_root)?, "/bin/bash", "-lc", package_script.as_str()])?;
 
     apply_overlay(tree, &build_root)?;
     install_branding(tree, &build_root, &config)?;
     stage_runtime(&build_root)?;
     build_aurora_repo(tree, &build_root, &config)?;
     finalize_rootfs(&build_root)?;
+
+    // The live root must not contain mounted proc/sys/dev when we snapshot it.
+    unmount_paths(&mounts);
 
     fs::create_dir_all(live_root.as_path())?;
     generate_manifest(&build_root, &live_root)?;
@@ -1167,10 +1464,6 @@ fn build_iso(tree: &Path, prompt_usb: bool, usb_device: Option<&Path>, system_mo
             config.volume_id.as_str(),
         ],
     )?;
-
-    for (_, dst) in mounts.iter().rev() {
-        let _ = run("umount", [path_str(dst)?]);
-    }
 
     println!("ISO created at {}", output_iso.display());
     if let Some(device) = usb_device {
@@ -1225,6 +1518,14 @@ fn scan_system() -> Result<SystemScan> {
         ram_mb,
         disks,
     })
+}
+
+fn unmount_paths(mounts: &[(&str, PathBuf)]) {
+    for (_, dst) in mounts.iter().rev() {
+        if let Ok(path) = path_str(dst) {
+            let _ = run("umount", [path]);
+        }
+    }
 }
 
 fn plan_partitions(scan: SystemScan, mode: BootMode, disk_gb: u64) -> PartitionPlan {
@@ -1550,6 +1851,17 @@ fn stage_runtime(rootfs: &Path) -> Result<()> {
         fs::set_permissions(&runtime_path, perms)?;
     }
 
+    let systemd_dir = rootfs.join("etc/systemd/system");
+    fs::create_dir_all(&systemd_dir)?;
+    fs::write(
+        systemd_dir.join("aurora-runtime.service"),
+        aurora_runtime_service(),
+    )?;
+    fs::write(
+        systemd_dir.join("aurora-inference.service"),
+        aurora_inference_service(),
+    )?;
+
     Ok(())
 }
 
@@ -1599,12 +1911,15 @@ fn write_installer_support(tree: &Path, partition_plan: &PartitionPlan) -> Resul
 fn finalize_rootfs(rootfs: &Path) -> Result<()> {
     let command = "command -v dconf >/dev/null 2>&1 && dconf update || true; \
                    command -v apt-get >/dev/null 2>&1 && apt-get update >/dev/null 2>&1 || true; \
-                   command -v apt-get >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y aurora-branding aurora-runtime-tools aurora-installer aurora-control-center aurora-app-center aurora-ai-hub aurora-gaming-center aurora-security-center aurora-welcome aurora-desktop >/dev/null 2>&1 || true; \
+                   command -v apt-get >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y aurora-branding aurora-runtime-tools aurora-installer aurora-control-center aurora-app-center aurora-ai-hub aurora-dev-lab aurora-creator-studio aurora-gaming-center aurora-security-center aurora-welcome aurora-desktop aurora-dev-stack aurora-creator-stack aurora-gaming-stack aurora-security-stack aurora-scientific-stack aurora-training-stack aurora-datacenter-stack aurora-privacy-stack >/dev/null 2>&1 || true; \
                    command -v flatpak >/dev/null 2>&1 && flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || true; \
-                   command -v systemctl >/dev/null 2>&1 && systemctl enable aurora-autosetup.service aurora-zram-setup.service >/dev/null 2>&1 || true; \
+                   command -v systemctl >/dev/null 2>&1 && systemctl enable aurora-autosetup.service aurora-zram-setup.service aurora-runtime.service aurora-inference.service >/dev/null 2>&1 || true; \
                    command -v systemctl >/dev/null 2>&1 && systemctl enable ollama >/dev/null 2>&1 || true; \
                    command -v systemctl >/dev/null 2>&1 && systemctl enable valkey-server >/dev/null 2>&1 || true; \
                    command -v systemctl >/dev/null 2>&1 && systemctl enable kdump-tools >/dev/null 2>&1 || true; \
+                   command -v plymouth-set-default-theme >/dev/null 2>&1 && plymouth-set-default-theme aurora-neon >/dev/null 2>&1 || true; \
+                   [ -d /usr/share/plymouth/themes/aurora-neon ] && ln -sf /usr/share/plymouth/themes/aurora-neon/aurora-neon.plymouth /etc/alternatives/default.plymouth || true; \
+                   command -v update-initramfs >/dev/null 2>&1 && update-initramfs -u >/dev/null 2>&1 || true; \
                    command -v update-alternatives >/dev/null 2>&1 && update-alternatives --set x-session-manager /usr/bin/gnome-shell >/dev/null 2>&1 || true";
     run("chroot", [path_str(rootfs)?, "/bin/sh", "-lc", command])
 }
@@ -1714,6 +2029,89 @@ fn performance_profile(mode: InstallMode) -> PerformanceProfile {
                 "noatime".to_string(),
             ],
         },
+        InstallMode::Creator => PerformanceProfile {
+            mode,
+            name: "Aurora Creator Studio".to_string(),
+            cpu_governor: "performance".to_string(),
+            enable_hugepages: true,
+            enable_gamemode: false,
+            enable_mangohud: false,
+            tune_sysctl: true,
+            enable_zram: true,
+            zram_fraction_percent: 50,
+            use_tmpfs_for_temp: true,
+            disable_unneeded_services: false,
+            enable_preload: true,
+            io_scheduler: "mq-deadline".to_string(),
+            swap_partition_policy: "cache-heavy-zram-disk".to_string(),
+            readahead_kb: 3072,
+            vm_swappiness: 14,
+            vm_dirty_ratio: 12,
+            vm_dirty_background_ratio: 4,
+            disable_cpu_idle: false,
+            scheduler_tune: "creator-cache-biased".to_string(),
+            cpu_energy_policy: "performance".to_string(),
+            kernel_cmdline_additions: vec![
+                "quiet".to_string(),
+                "splash".to_string(),
+                "transparent_hugepage=madvise".to_string(),
+            ],
+        },
+        InstallMode::Training => PerformanceProfile {
+            mode,
+            name: "Aurora Training".to_string(),
+            cpu_governor: "performance".to_string(),
+            enable_hugepages: true,
+            enable_gamemode: false,
+            enable_mangohud: false,
+            tune_sysctl: true,
+            enable_zram: true,
+            zram_fraction_percent: 65,
+            use_tmpfs_for_temp: true,
+            disable_unneeded_services: true,
+            enable_preload: false,
+            io_scheduler: "none".to_string(),
+            swap_partition_policy: "dataset-staging-zram-disk".to_string(),
+            readahead_kb: 4096,
+            vm_swappiness: 10,
+            vm_dirty_ratio: 18,
+            vm_dirty_background_ratio: 6,
+            disable_cpu_idle: true,
+            scheduler_tune: "training-throughput".to_string(),
+            cpu_energy_policy: "performance".to_string(),
+            kernel_cmdline_additions: vec![
+                "quiet".to_string(),
+                "transparent_hugepage=always".to_string(),
+                "numa_balancing=disable".to_string(),
+            ],
+        },
+        InstallMode::Datacenter => PerformanceProfile {
+            mode,
+            name: "Aurora Datacenter".to_string(),
+            cpu_governor: "performance".to_string(),
+            enable_hugepages: true,
+            enable_gamemode: false,
+            enable_mangohud: false,
+            tune_sysctl: true,
+            enable_zram: true,
+            zram_fraction_percent: 30,
+            use_tmpfs_for_temp: false,
+            disable_unneeded_services: true,
+            enable_preload: false,
+            io_scheduler: "mq-deadline".to_string(),
+            swap_partition_policy: "predictable-disk-backed".to_string(),
+            readahead_kb: 1024,
+            vm_swappiness: 8,
+            vm_dirty_ratio: 8,
+            vm_dirty_background_ratio: 3,
+            disable_cpu_idle: false,
+            scheduler_tune: "service-isolated".to_string(),
+            cpu_energy_policy: "balance_performance".to_string(),
+            kernel_cmdline_additions: vec![
+                "quiet".to_string(),
+                "systemd.unified_cgroup_hierarchy=1".to_string(),
+            ],
+        },
         InstallMode::MaxThroughput => PerformanceProfile {
             mode,
             name: "Aurora Maximum Throughput".to_string(),
@@ -1799,10 +2197,44 @@ fn is_optional_package(package: &str) -> bool {
             | "fprintd"
             | "ollama"
             | "copyq"
+            | "podman"
+            | "distrobox"
+            | "virt-manager"
+            | "qemu-system-x86"
+            | "libvirt-daemon-system"
+            | "bridge-utils"
+            | "dnsmasq-base"
             | "gamescope"
             | "goverlay"
             | "mesa-vulkan-drivers"
             | "mesa-utils"
+            | "vulkan-tools"
+            | "lutris"
+            | "wine64"
+            | "winetricks"
+            | "pciutils"
+            | "inxi"
+            | "clinfo"
+            | "obs-studio"
+            | "gimp"
+            | "inkscape"
+            | "ffmpeg"
+            | "libreoffice"
+            | "kdenlive"
+            | "blender"
+            | "krita"
+            | "audacity"
+            | "git-lfs"
+            | "tmux"
+            | "direnv"
+            | "shellcheck"
+            | "hyperfine"
+            | "wireshark"
+            | "nmap"
+            | "tcpdump"
+            | "strace"
+            | "bpfcc-tools"
+            | "gh"
             | "libspa-0.2-bluetooth"
             | "valkey-server"
             | "kdump-tools"
@@ -1819,6 +2251,29 @@ fn is_optional_package(package: &str) -> bool {
             | "zellij"
             | "bottom"
             | "just"
+            | "neofetch"
+            | "micro"
+            | "ranger"
+            | "tldr"
+            | "duf"
+            | "ncdu"
+            | "glances"
+            | "silversearcher-ag"
+            | "fzf"
+            | "jq"
+            | "python3-venv"
+            | "python3-pip"
+            | "python3-dev"
+            | "sysstat"
+            | "dstat"
+            | "iotop"
+            | "fio"
+            | "nvme-cli"
+            | "prometheus-node-exporter"
+            | "tor"
+            | "torsocks"
+            | "macchanger"
+            | "usbguard"
     )
 }
 
@@ -1861,12 +2316,22 @@ fn aurora_package_specs(config: &BuildConfig) -> Vec<AuroraPackageSpec> {
                 "usr/local/bin/aurora-apply-desktop".to_string(),
                 "usr/local/bin/aurora-autosetup".to_string(),
                 "usr/local/bin/aurora-ai-setup".to_string(),
+                "usr/local/bin/aurora-dev-setup".to_string(),
+                "usr/local/bin/aurora-creator-setup".to_string(),
                 "usr/local/bin/aurora-gaming-setup".to_string(),
+                "usr/local/bin/aurora-gpu-setup".to_string(),
+                "usr/local/bin/aurora-ai-helper".to_string(),
+                "usr/local/bin/aurora-privacy-setup".to_string(),
+                "usr/local/bin/aurora-training-setup".to_string(),
+                "usr/local/bin/aurora-datacenter-setup".to_string(),
                 "usr/local/bin/aurora-security-setup".to_string(),
+                "usr/local/bin/aurora-hardware-guard".to_string(),
                 "usr/local/bin/aurora-directstream".to_string(),
                 "etc/default/aurora-performance".to_string(),
                 "etc/aurora/directstream.conf".to_string(),
                 "etc/systemd/system/aurora-autosetup.service".to_string(),
+                "etc/systemd/system/aurora-inference.service".to_string(),
+                "etc/systemd/system/aurora-runtime.service".to_string(),
                 "etc/systemd/system/aurora-zram-setup.service".to_string(),
             ],
             postinst: Some(
@@ -1927,6 +2392,32 @@ fn aurora_package_specs(config: &BuildConfig) -> Vec<AuroraPackageSpec> {
             postinst: None,
         },
         AuroraPackageSpec {
+            name: "aurora-dev-lab".to_string(),
+            version: version.clone(),
+            architecture: "all".to_string(),
+            depends: vec!["aurora-runtime-tools".to_string()],
+            description: "Aurora Dev Lab with containers, benchmarking, shell tooling, and development workspace setup.".to_string(),
+            payload_paths: vec![
+                "usr/share/aurora/dev-lab".to_string(),
+                "usr/share/applications/aurora-dev-lab.desktop".to_string(),
+                "usr/local/bin/aurora-dev-setup".to_string(),
+            ],
+            postinst: None,
+        },
+        AuroraPackageSpec {
+            name: "aurora-creator-studio".to_string(),
+            version: version.clone(),
+            architecture: "all".to_string(),
+            depends: vec!["aurora-runtime-tools".to_string()],
+            description: "Aurora Creator Studio with capture, media, graphics, and office workflow entrypoints.".to_string(),
+            payload_paths: vec![
+                "usr/share/aurora/creator-studio".to_string(),
+                "usr/share/applications/aurora-creator-studio.desktop".to_string(),
+                "usr/local/bin/aurora-creator-setup".to_string(),
+            ],
+            postinst: None,
+        },
+        AuroraPackageSpec {
             name: "aurora-gaming-center".to_string(),
             version: version.clone(),
             architecture: "all".to_string(),
@@ -1962,7 +2453,9 @@ fn aurora_package_specs(config: &BuildConfig) -> Vec<AuroraPackageSpec> {
             description: "Aurora welcome flow, firstboot launcher, and curated getting-started surface.".to_string(),
             payload_paths: vec![
                 "usr/share/aurora/welcome".to_string(),
+                "usr/share/aurora/andromeda".to_string(),
                 "usr/share/applications/aurora-welcome.desktop".to_string(),
+                "usr/share/applications/aurora-andromeda.desktop".to_string(),
                 "usr/local/bin/aurora-firstboot".to_string(),
             ],
             postinst: None,
@@ -1977,6 +2470,8 @@ fn aurora_package_specs(config: &BuildConfig) -> Vec<AuroraPackageSpec> {
                 "aurora-app-center".to_string(),
                 "aurora-installer".to_string(),
                 "aurora-welcome".to_string(),
+                "aurora-dev-lab".to_string(),
+                "aurora-creator-studio".to_string(),
             ],
             description: format!("{} desktop identity, workflows, and integrated Aurora user experience layer.", config.branding_name),
             payload_paths: vec![],
@@ -2007,16 +2502,117 @@ fn aurora_package_specs(config: &BuildConfig) -> Vec<AuroraPackageSpec> {
         },
         AuroraPackageSpec {
             name: "aurora-creator-stack".to_string(),
-            version,
+            version: version.clone(),
             architecture: "all".to_string(),
             depends: vec![
+                "aurora-creator-studio".to_string(),
                 "aurora-app-center".to_string(),
                 "flatpak".to_string(),
                 "vlc".to_string(),
-                "zellij".to_string(),
-                "helix".to_string(),
+                "obs-studio".to_string(),
+                "ffmpeg".to_string(),
+                "gimp".to_string(),
+                "inkscape".to_string(),
+                "libreoffice".to_string(),
             ],
             description: "Aurora creator stack meta-package for workstation and media tooling.".to_string(),
+            payload_paths: vec![],
+            postinst: None,
+        },
+        AuroraPackageSpec {
+            name: "aurora-dev-stack".to_string(),
+            version: version.clone(),
+            architecture: "all".to_string(),
+            depends: vec![
+                "aurora-dev-lab".to_string(),
+                "git".to_string(),
+                "git-lfs".to_string(),
+                "podman".to_string(),
+                "distrobox".to_string(),
+                "tmux".to_string(),
+                "direnv".to_string(),
+                "shellcheck".to_string(),
+                "hyperfine".to_string(),
+            ],
+            description: "Aurora development stack meta-package for containers, shell workflows, and benchmarking.".to_string(),
+            payload_paths: vec![],
+            postinst: None,
+        },
+        AuroraPackageSpec {
+            name: "aurora-security-stack".to_string(),
+            version: version.clone(),
+            architecture: "all".to_string(),
+            depends: vec![
+                "aurora-security-center".to_string(),
+                "ufw".to_string(),
+                "fail2ban".to_string(),
+                "apparmor-utils".to_string(),
+                "fprintd".to_string(),
+                "kdump-tools".to_string(),
+                "authd".to_string(),
+            ],
+            description: "Aurora security stack meta-package for hardening and recovery tooling.".to_string(),
+            payload_paths: vec![],
+            postinst: None,
+        },
+        AuroraPackageSpec {
+            name: "aurora-scientific-stack".to_string(),
+            version,
+            architecture: "all".to_string(),
+            depends: vec![
+                "numactl".to_string(),
+                "linux-tools-generic".to_string(),
+                "hwloc".to_string(),
+                "valkey-server".to_string(),
+                "ripgrep".to_string(),
+                "fd-find".to_string(),
+            ],
+            description: "Aurora scientific stack meta-package for profiling, NUMA placement, and high-speed data work.".to_string(),
+            payload_paths: vec![],
+            postinst: None,
+        },
+        AuroraPackageSpec {
+            name: "aurora-training-stack".to_string(),
+            version: "1.0".to_string(),
+            architecture: "all".to_string(),
+            depends: vec![
+                "aurora-ai-hub".to_string(),
+                "python3-venv".to_string(),
+                "python3-pip".to_string(),
+                "numactl".to_string(),
+                "hwloc".to_string(),
+                "valkey-server".to_string(),
+            ],
+            description: "Aurora training stack meta-package for local AI and throughput-oriented data workflows.".to_string(),
+            payload_paths: vec![],
+            postinst: None,
+        },
+        AuroraPackageSpec {
+            name: "aurora-datacenter-stack".to_string(),
+            version: "1.0".to_string(),
+            architecture: "all".to_string(),
+            depends: vec![
+                "prometheus-node-exporter".to_string(),
+                "sysstat".to_string(),
+                "iotop".to_string(),
+                "fio".to_string(),
+                "nvme-cli".to_string(),
+            ],
+            description: "Aurora datacenter stack meta-package for service observability, storage validation, and host operations.".to_string(),
+            payload_paths: vec![],
+            postinst: None,
+        },
+        AuroraPackageSpec {
+            name: "aurora-privacy-stack".to_string(),
+            version: "1.0".to_string(),
+            architecture: "all".to_string(),
+            depends: vec![
+                "tor".to_string(),
+                "torsocks".to_string(),
+                "macchanger".to_string(),
+                "usbguard".to_string(),
+            ],
+            description: "Aurora privacy stack meta-package for local hardening, MAC hygiene, and host privacy defaults.".to_string(),
             payload_paths: vec![],
             postinst: None,
         },
@@ -2191,7 +2787,7 @@ fn aurora_sources_file() -> String {
 
 fn aurora_repo_release(config: &BuildConfig) -> String {
     format!(
-        "Origin: {name}\nLabel: {name} Archive\nSuite: stable\nCodename: aurora-stable\nArchitectures: amd64\nComponents: main\nDescription: Curated Aurora package archive layered on top of Ubuntu\n",
+        "Origin: {name}\nLabel: {name} Archive\nSuite: stable\nCodename: aurora-stable\nArchitectures: amd64\nComponents: main\nDescription: Curated Aurora package archive layered on top of a Debian-compatible base system\n",
         name = config.branding_name
     )
 }
@@ -2211,6 +2807,12 @@ fn aurora_repo_packages(config: &BuildConfig) -> String {
             "Aurora local AI stack with curated offline model integration.",
         ),
         aurora_repo_package_entry(
+            "aurora-dev-stack",
+            "1.0",
+            "aurora-dev-lab, git, git-lfs, podman, distrobox, tmux, direnv",
+            "Aurora development stack with containers, shell automation, and benchmarking.",
+        ),
+        aurora_repo_package_entry(
             "aurora-gaming-stack",
             "1.0",
             "gamemode, mangohud, gamescope",
@@ -2219,8 +2821,38 @@ fn aurora_repo_packages(config: &BuildConfig) -> String {
         aurora_repo_package_entry(
             "aurora-creator-stack",
             "1.0",
-            "flatpak, vlc, zellij, helix",
-            "Aurora creator and workstation stack with media and Rust-native utilities.",
+            "aurora-creator-studio, obs-studio, ffmpeg, gimp, inkscape, libreoffice",
+            "Aurora creator stack with capture, media, design, and workstation tooling.",
+        ),
+        aurora_repo_package_entry(
+            "aurora-security-stack",
+            "1.0",
+            "aurora-security-center, ufw, fail2ban, apparmor-utils, kdump-tools",
+            "Aurora security stack with hardening, access control, and recovery tooling.",
+        ),
+        aurora_repo_package_entry(
+            "aurora-scientific-stack",
+            "1.0",
+            "numactl, linux-tools-generic, hwloc, valkey-server",
+            "Aurora scientific stack with profiling, NUMA, and high-throughput support tools.",
+        ),
+        aurora_repo_package_entry(
+            "aurora-training-stack",
+            "1.0",
+            "aurora-ai-hub, python3-venv, python3-pip, numactl, hwloc, valkey-server",
+            "Aurora training stack with local AI, memory locality, and sustained throughput helpers.",
+        ),
+        aurora_repo_package_entry(
+            "aurora-datacenter-stack",
+            "1.0",
+            "prometheus-node-exporter, sysstat, iotop, fio, nvme-cli",
+            "Aurora datacenter stack with observability and storage-validation tools.",
+        ),
+        aurora_repo_package_entry(
+            "aurora-privacy-stack",
+            "1.0",
+            "tor, torsocks, macchanger, usbguard",
+            "Aurora privacy stack with local network and device-hardening posture.",
         ),
     ]
     .join("\n")
@@ -2252,20 +2884,26 @@ fn aurora_archive_catalog_json(config: &BuildConfig) -> Result<String> {
             "suite": "stable",
             "component": "main",
             "channel": "aurora-curated",
-            "base": "ubuntu-noble"
+            "base": "noble-compatible"
         },
         "labels": [
             {"id": "aurora", "name": "Aurora Curated"},
             {"id": "gaming", "name": "Gaming Ready"},
             {"id": "ai", "name": "AI Native"},
             {"id": "creator", "name": "Creator Stack"},
-            {"id": "secure", "name": "Security Hardened"}
+            {"id": "secure", "name": "Security Hardened"},
+            {"id": "training", "name": "Training Stack"},
+            {"id": "datacenter", "name": "Datacenter Ops"},
+            {"id": "privacy", "name": "Privacy Guard"}
         ],
         "featured": [
             {"package": "aurora-desktop", "title": "Aurora Desktop", "origin": "Aurora Archive", "label": "Aurora Curated"},
             {"package": "aurora-ai-stack", "title": "Aurora AI Stack", "origin": "Aurora Archive", "label": "AI Native"},
             {"package": "aurora-gaming-stack", "title": "Aurora Gaming Stack", "origin": "Aurora Archive", "label": "Gaming Ready"},
-            {"package": "aurora-creator-stack", "title": "Aurora Creator Stack", "origin": "Aurora Archive", "label": "Creator Stack"}
+            {"package": "aurora-creator-stack", "title": "Aurora Creator Stack", "origin": "Aurora Archive", "label": "Creator Stack"},
+            {"package": "aurora-training-stack", "title": "Aurora Training Stack", "origin": "Aurora Archive", "label": "Training Stack"},
+            {"package": "aurora-datacenter-stack", "title": "Aurora Datacenter Stack", "origin": "Aurora Archive", "label": "Datacenter Ops"},
+            {"package": "aurora-privacy-stack", "title": "Aurora Privacy Stack", "origin": "Aurora Archive", "label": "Privacy Guard"}
         ]
     }))
     .context("failed to render aurora archive catalog")
@@ -2277,12 +2915,17 @@ fn aurora_meta_packages_json(config: &BuildConfig) -> Result<String> {
             {
                 "name": "aurora-desktop",
                 "title": format!("{} Desktop", config.branding_name),
-                "depends": ["aurora-control-center", "aurora-app-center", "aurora-welcome", "aurora-gaming-center", "aurora-ai-hub", "aurora-security-center"]
+                "depends": ["aurora-control-center", "aurora-app-center", "aurora-welcome", "aurora-dev-lab", "aurora-creator-studio", "aurora-gaming-center", "aurora-ai-hub", "aurora-security-center"]
             },
             {
                 "name": "aurora-ai-stack",
                 "title": "Aurora AI Stack",
                 "depends": ["ollama", "aurora-ai-hub", "ripgrep", "fd-find", "bat", "helix"]
+            },
+            {
+                "name": "aurora-dev-stack",
+                "title": "Aurora Dev Stack",
+                "depends": ["aurora-dev-lab", "git", "git-lfs", "podman", "distrobox", "tmux", "direnv", "shellcheck", "hyperfine"]
             },
             {
                 "name": "aurora-gaming-stack",
@@ -2292,7 +2935,32 @@ fn aurora_meta_packages_json(config: &BuildConfig) -> Result<String> {
             {
                 "name": "aurora-creator-stack",
                 "title": "Aurora Creator Stack",
-                "depends": ["flatpak", "gnome-software-plugin-flatpak", "vlc", "zellij", "bottom", "just"]
+                "depends": ["aurora-creator-studio", "obs-studio", "ffmpeg", "gimp", "inkscape", "libreoffice"]
+            },
+            {
+                "name": "aurora-security-stack",
+                "title": "Aurora Security Stack",
+                "depends": ["aurora-security-center", "ufw", "fail2ban", "apparmor-utils", "fprintd", "kdump-tools", "authd"]
+            },
+            {
+                "name": "aurora-scientific-stack",
+                "title": "Aurora Scientific Stack",
+                "depends": ["numactl", "linux-tools-generic", "hwloc", "valkey-server", "ripgrep", "fd-find"]
+            },
+            {
+                "name": "aurora-training-stack",
+                "title": "Aurora Training Stack",
+                "depends": ["aurora-ai-hub", "python3-venv", "python3-pip", "numactl", "hwloc", "valkey-server"]
+            },
+            {
+                "name": "aurora-datacenter-stack",
+                "title": "Aurora Datacenter Stack",
+                "depends": ["prometheus-node-exporter", "sysstat", "iotop", "fio", "nvme-cli"]
+            },
+            {
+                "name": "aurora-privacy-stack",
+                "title": "Aurora Privacy Stack",
+                "depends": ["tor", "torsocks", "macchanger", "usbguard"]
             }
         ]
     }))
@@ -2333,6 +3001,14 @@ fn desktop_packages(desktop: &DesktopPreset) -> Vec<String> {
             "gnome-tweaks".to_string(),
             "flatpak".to_string(),
             "gnome-software-plugin-flatpak".to_string(),
+            "obs-studio".to_string(),
+            "gimp".to_string(),
+            "inkscape".to_string(),
+            "ffmpeg".to_string(),
+            "libreoffice".to_string(),
+            "podman".to_string(),
+            "distrobox".to_string(),
+            "virt-manager".to_string(),
         ],
         DesktopPreset::Kde => vec![
             "kubuntu-desktop".to_string(),
@@ -2367,6 +3043,14 @@ fn aurora_ai_hub_desktop_file() -> String {
     desktop_entry("Aurora AI Hub", "ai-hub", "Utility;Development")
 }
 
+fn aurora_dev_lab_desktop_file() -> String {
+    desktop_entry("Aurora Dev Lab", "dev-lab", "Development;System")
+}
+
+fn aurora_creator_studio_desktop_file() -> String {
+    desktop_entry("Aurora Creator Studio", "creator-studio", "AudioVideo;Graphics;Office")
+}
+
 fn aurora_gaming_center_desktop_file() -> String {
     desktop_entry("Aurora Gaming Center", "gaming-center", "Game;System")
 }
@@ -2383,6 +3067,10 @@ fn aurora_welcome_desktop_file() -> String {
     desktop_entry("Aurora Welcome", "welcome", "System")
 }
 
+fn aurora_andromeda_desktop_file() -> String {
+    "[Desktop Entry]\nType=Application\nName=Aurora Andromeda\nExec=/bin/sh -lc 'xdg-open /usr/share/aurora/andromeda/index.html || gio open /usr/share/aurora/andromeda/index.html || firefox /usr/share/aurora/andromeda/index.html'\nTerminal=false\nX-GNOME-Autostart-enabled=true\nCategories=System;\n".to_string()
+}
+
 fn desktop_entry(name: &str, surface: &str, categories: &str) -> String {
     format!(
         "[Desktop Entry]\nType=Application\nName={name}\nExec=/bin/sh -lc 'x-terminal-emulator -e aurora-distro app {surface} || gnome-terminal -- aurora-distro app {surface} || alacritty -e aurora-distro app {surface} || xterm -e aurora-distro app {surface}'\nTerminal=false\nX-GNOME-Autostart-enabled=true\nCategories={categories};\n"
@@ -2391,14 +3079,14 @@ fn desktop_entry(name: &str, surface: &str, categories: &str) -> String {
 
 fn firstboot_script(installer: &InstallerConfig) -> String {
     format!(
-        "#!/usr/bin/env bash\nset -euo pipefail\nMODE_FILE=/etc/aurora-installer/selected-mode\nif [ ! -f \"$MODE_FILE\" ]; then\n  printf '%s\\n' '{}' > \"$MODE_FILE\"\nfi\nif systemctl list-unit-files | grep -q '^aurora-autosetup.service'; then\n  systemctl enable aurora-autosetup.service >/dev/null 2>&1 || true\n  systemctl start aurora-autosetup.service >/dev/null 2>&1 || true\nfi\ncommand -v aurora-apply-desktop >/dev/null 2>&1 && aurora-apply-desktop || true\ncommand -v aurora-ai-setup >/dev/null 2>&1 && aurora-ai-setup --firstboot || true\ncommand -v aurora-gaming-setup >/dev/null 2>&1 && aurora-gaming-setup --firstboot || true\ncommand -v aurora-security-setup >/dev/null 2>&1 && aurora-security-setup --firstboot || true\nprintf '%s\\n' \"$(cat \"$MODE_FILE\")\" >/tmp/aurora-installer-mode\nif command -v xdg-open >/dev/null 2>&1; then\n  xdg-open /usr/share/aurora/installer/index.html >/dev/null 2>&1 || true\nfi\n",
+        "#!/usr/bin/env bash\nset -euo pipefail\nMODE_FILE=/etc/aurora-installer/selected-mode\nif [ ! -f \"$MODE_FILE\" ]; then\n  printf '%s\\n' '{}' > \"$MODE_FILE\"\nfi\nif systemctl list-unit-files | grep -q '^aurora-autosetup.service'; then\n  systemctl enable aurora-autosetup.service >/dev/null 2>&1 || true\n  systemctl start aurora-autosetup.service >/dev/null 2>&1 || true\nfi\ncommand -v aurora-apply-desktop >/dev/null 2>&1 && aurora-apply-desktop || true\ncommand -v aurora-gpu-setup >/dev/null 2>&1 && aurora-gpu-setup --firstboot || true\ncommand -v aurora-ai-setup >/dev/null 2>&1 && aurora-ai-setup --firstboot || true\ncommand -v aurora-ai-helper >/dev/null 2>&1 && aurora-ai-helper status >/dev/null 2>&1 || true\ncommand -v aurora-dev-setup >/dev/null 2>&1 && aurora-dev-setup || true\ncommand -v aurora-creator-setup >/dev/null 2>&1 && aurora-creator-setup || true\ncommand -v aurora-gaming-setup >/dev/null 2>&1 && aurora-gaming-setup --firstboot || true\ncommand -v aurora-training-setup >/dev/null 2>&1 && aurora-training-setup || true\ncommand -v aurora-datacenter-setup >/dev/null 2>&1 && aurora-datacenter-setup || true\ncommand -v aurora-security-setup >/dev/null 2>&1 && aurora-security-setup --firstboot || true\ncommand -v aurora-privacy-setup >/dev/null 2>&1 && aurora-privacy-setup --firstboot || true\ncommand -v aurora-hardware-guard >/dev/null 2>&1 && aurora-hardware-guard --seal || true\nprintf '%s\\n' \"$(cat \"$MODE_FILE\")\" >/tmp/aurora-installer-mode\nif command -v xdg-open >/dev/null 2>&1; then\n  xdg-open /usr/share/aurora/andromeda/index.html >/dev/null 2>&1 || true\nfi\n",
         install_mode_name(&installer.default_mode)
     )
 }
 
 fn installer_html(name: &str, accent: &str, installer: &InstallerConfig) -> String {
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{name} Installer</title><link rel=\"stylesheet\" href=\"installer.css\"></head><body><main class=\"shell\"><section class=\"hero\"><div class=\"brand-row\"><img class=\"brand-mark\" src=\"/usr/share/aurora/logo.svg\" alt=\"{name} logo\"><div><p class=\"eyebrow\">Adaptive Neon Workstation</p><h1>{name}</h1></div></div><p class=\"lede\">Shape the system before install: choose your runtime mode, deploy a tuned partition plan, and boot into a shell curated around speed, visuals, and stronger day-one tooling.</p><div class=\"cta-row\"><button id=\"scanBtn\">Scan This System</button><button id=\"planBtn\">Create Partition Plan</button><button id=\"usbBtn\">Use Inbuilt USB Writer</button><button id=\"repairBtn\">Show Boot Repair</button></div></section><section class=\"grid\"><article class=\"card mode-card\"><h2>Balanced</h2><p>Moderate zram, calmer I/O tuning, and lower background disruption for mixed desktop workloads.</p><button data-mode=\"balanced\">Choose Balanced</button></article><article class=\"card mode-card\"><h2>Gaming</h2><p>Lower-latency desktop tuning with GameMode, MangoHud, GNOME shell extras, and faster storage defaults.</p><button data-mode=\"gaming\">Choose Gaming</button></article><article class=\"card mode-card\"><h2>Max Throughput</h2><p>Pushes CPU throughput, hugepage usage, zram, and aggressive boot/runtime knobs for compute-heavy work.</p><button data-mode=\"max-throughput\">Choose Max Throughput</button></article><article class=\"card\"><h2>Out-of-Box Stack</h2><p>Flatpak-ready app flow, tuned shell defaults, bold theming, runtime tooling, repair scripts, and a performance control surface.</p></article></section><section class=\"terminal\"><div class=\"terminal-bar\"><span></span><span></span><span></span></div><pre id=\"output\">Awaiting action...</pre></section></main><script>window.AURORA_INSTALLER={{accent:\"{accent}\",name:\"{name}\",defaultMode:\"{}\",availableModes:{},memoryBoost:{},bootRepair:{}}};</script><script src=\"installer.js\"></script></body></html>",
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{name} Installer</title><link rel=\"stylesheet\" href=\"installer.css\"></head><body><main class=\"shell\"><section class=\"hero\"><div class=\"brand-row\"><img class=\"brand-mark\" src=\"/usr/share/aurora/logo.svg\" alt=\"{name} logo\"><div><p class=\"eyebrow\">Adaptive Neon Workstation</p><h1>{name}</h1></div></div><p class=\"lede\">Shape the system before install: choose your runtime mode, deploy a tuned partition plan, and boot into a shell curated around speed, visuals, and stronger day-one tooling.</p><div class=\"cta-row\"><button id=\"scanBtn\">Scan This System</button><button id=\"planBtn\">Create Partition Plan</button><button id=\"usbBtn\">Use Inbuilt USB Writer</button><button id=\"repairBtn\">Show Boot Repair</button></div></section><section class=\"grid\"><article class=\"card mode-card\"><h2>Balanced</h2><p>Moderate zram, calmer I/O tuning, and lower background disruption for mixed desktop workloads.</p><button data-mode=\"balanced\">Choose Balanced</button></article><article class=\"card mode-card\"><h2>Gaming</h2><p>Frame-time stability, low latency, DirectStream asset priming, and launcher-ready gaming defaults.</p><button data-mode=\"gaming\">Choose Gaming</button></article><article class=\"card mode-card\"><h2>Creator</h2><p>Disk, cache, and memory posture for editing, rendering, OBS capture, and FFmpeg or Blender-class sessions.</p><button data-mode=\"creator\">Choose Creator</button></article><article class=\"card mode-card\"><h2>Training</h2><p>Hugepages, dataset staging, memory locality, and long-running throughput for local AI training.</p><button data-mode=\"training\">Choose Training</button></article><article class=\"card mode-card\"><h2>Datacenter</h2><p>Predictable scheduling, service isolation, I/O policy, and observability for service hosts.</p><button data-mode=\"datacenter\">Choose Datacenter</button></article><article class=\"card mode-card\"><h2>Max Throughput</h2><p>Pushes CPU throughput, hugepage usage, zram, and aggressive boot/runtime knobs for compute-heavy work.</p><button data-mode=\"max-throughput\">Choose Max Throughput</button></article><article class=\"card\"><h2>Out-of-Box Stack</h2><p>Flatpak-ready app flow, tuned shell defaults, bold theming, runtime tooling, repair scripts, GPU staging, and a performance control surface.</p></article></section><section class=\"terminal\"><div class=\"terminal-bar\"><span></span><span></span><span></span></div><pre id=\"output\">Awaiting action...</pre></section></main><script>window.AURORA_INSTALLER={{accent:\"{accent}\",name:\"{name}\",defaultMode:\"{}\",availableModes:{},memoryBoost:{},bootRepair:{}}};</script><script src=\"installer.js\"></script></body></html>",
         install_mode_name(&installer.default_mode),
         serde_json::to_string(&installer.available_modes).unwrap_or_else(|_| "[]".to_string()),
         installer.enable_memory_boost_wizard,
@@ -2413,12 +3101,12 @@ fn installer_css(accent: &str) -> String {
 }
 
 fn installer_js(_installer: &InstallerConfig) -> String {
-    "const cfg=window.AURORA_INSTALLER;const output=document.getElementById('output');const write=(lines)=>output.textContent=lines.join('\\n');const modes={balanced:['Balanced mode selected','- schedutil governor','- moderate zram and preload','- quieter background-service policy','- good default for general workstations'],gaming:['Gaming mode selected','- performance governor','- enable GameMode and MangoHud','- lower-latency readahead and I/O profile','- best fit for desktop responsiveness and games'],['max-throughput']:['Max Throughput selected','- performance governor + aggressive hugepage posture','- highest zram allocation and stronger cache tuning','- trims more services and boosts readahead','- best fit for compute-heavy sustained workloads']};document.getElementById('scanBtn').addEventListener('click',()=>write(['Scanning current machine...','- detect firmware mode','- detect CPU model and RAM','- enumerate storage devices','- estimate swap + zram balance','Result: if details are missing, aurora-distro can fall back to automatic planning.']));document.getElementById('planBtn').addEventListener('click',()=>write(['Generating partition plan...','- choose GPT for UEFI or hybrid installs','- add BIOS_GRUB when legacy GRUB embedding is needed','- size swap from RAM and disk pressure','- keep partition-apply.sh ready for manual replay','Result: installer can switch between balanced, gaming, and throughput presets after partitioning.']));document.getElementById('usbBtn').addEventListener('click',()=>write(['Inbuilt USB writer flow','1. Confirm target device','2. Verify path is a block device','3. Write ISO with dd + sync','4. Return success/failure logs to the user']));document.getElementById('repairBtn').addEventListener('click',()=>write(['Boot repair toolkit','- bind-mount /dev /proc /sys','- reinstall GRUB for EFI and BIOS targets when available','- refresh initramfs and grub.cfg','- keep BOOTX64.EFI fallback in place for UEFI firmware']));document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>write(modes[btn.dataset.mode]||['Unknown mode'])));write(['Default installer mode: '+cfg.defaultMode,'Available modes: '+cfg.availableModes.join(', '),'Choose a mode, then scan hardware or generate a partition plan.']);".to_string()
+    "const cfg=window.AURORA_INSTALLER;const output=document.getElementById('output');const write=(lines)=>output.textContent=lines.join('\\n');const modes={balanced:['Balanced mode selected','- schedutil governor','- moderate zram and preload','- quieter background-service policy','- good default for mixed desktop work'],gaming:['Gaming mode selected','- performance governor','- frame-time focused storage/read-ahead posture','- enables GameMode, MangoHud, Gamescope, and DirectStream hints','- best fit for desktop responsiveness and games'],creator:['Creator mode selected','- performance governor with cache-biased writeback','- strong fit for OBS, FFmpeg, Blender, and editing workflows','- favors responsive export and media ingest'],training:['Training mode selected','- hugepages and throughput-first memory posture','- dataset/cache staging for long-running jobs','- mixed CPU/GPU orchestration target when hardware exists'],datacenter:['Datacenter mode selected','- predictable I/O scheduler and lower swappiness','- service isolation and observability posture','- favors consistent service latency over desktop feel'],['max-throughput']:['Max Throughput selected','- performance governor + aggressive hugepage posture','- highest zram allocation and stronger cache tuning','- trims more services and boosts readahead','- best fit for compute-heavy sustained workloads']};document.getElementById('scanBtn').addEventListener('click',()=>write(['Scanning current machine...','- detect firmware mode','- detect CPU model and RAM','- enumerate storage devices','- estimate swap + zram balance','Result: if details are missing, aurora-distro can fall back to automatic planning.']));document.getElementById('planBtn').addEventListener('click',()=>write(['Generating partition plan...','- choose GPT for UEFI or hybrid installs','- add BIOS_GRUB when legacy GRUB embedding is needed','- size swap from RAM and disk pressure','- keep partition-apply.sh ready for manual replay','Result: installer can switch between workload profiles after partitioning.']));document.getElementById('usbBtn').addEventListener('click',()=>write(['Inbuilt USB writer flow','1. Confirm target device','2. Verify path is a block device','3. Write ISO with dd + sync','4. Return success/failure logs to the user']));document.getElementById('repairBtn').addEventListener('click',()=>write(['Boot repair toolkit','- bind-mount /dev /proc /sys','- reinstall GRUB for EFI and BIOS targets when available','- refresh initramfs and grub.cfg','- keep BOOTX64.EFI fallback in place for UEFI firmware']));document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>write(modes[btn.dataset.mode]||['Unknown mode'])));write(['Default installer mode: '+cfg.defaultMode,'Available modes: '+cfg.availableModes.join(', '),'Choose a mode, then scan hardware or generate a partition plan.']);".to_string()
 }
 
 fn control_center_html(name: &str, accent: &str) -> String {
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} Control Center</title><link rel=\"stylesheet\" href=\"control-center.css\"></head><body><main class=\"frame\"><section class=\"hero\"><p class=\"eyebrow\">Aurora Runtime Control</p><h1>{name} Control Center</h1><p class=\"lede\">Switch system modes, inspect runtime placement, and keep the distro personality consistent after install.</p></section><section class=\"grid\"><button data-mode=\"balanced\">Balanced</button><button data-mode=\"gaming\">Gaming</button><button data-mode=\"max-throughput\">Max Throughput</button><button id=\"desktopBtn\">Apply Desktop Layer</button><button id=\"runtimeBtn\">Runtime Status</button><button id=\"tourBtn\">Open Welcome Tour</button><button id=\"aiBtn\">Open AI Hub</button><button id=\"gamingBtn\">Open Gaming Center</button><button id=\"securityBtn\">Open Security Center</button><button id=\"packageBtn\">Open Package Center</button></section><pre id=\"terminal\">Aurora control surface ready.</pre></main><script>window.AURORA_CC={{name:\"{name}\",accent:\"{accent}\"}};</script><script src=\"control-center.js\"></script></body></html>"
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} Control Center</title><link rel=\"stylesheet\" href=\"control-center.css\"></head><body><main class=\"frame\"><section class=\"hero\"><p class=\"eyebrow\">Aurora Runtime Control</p><h1>{name} Control Center</h1><p class=\"lede\">Switch system modes, inspect runtime placement, and keep the distro personality consistent after install.</p></section><section class=\"grid\"><button data-mode=\"balanced\">Balanced</button><button data-mode=\"gaming\">Gaming</button><button data-mode=\"creator\">Creator</button><button data-mode=\"training\">Training</button><button data-mode=\"datacenter\">Datacenter</button><button data-mode=\"max-throughput\">Max Throughput</button><button id=\"desktopBtn\">Apply Desktop Layer</button><button id=\"runtimeBtn\">Runtime Status</button><button id=\"tourBtn\">Open Welcome Tour</button><button id=\"aiBtn\">Open AI Hub</button><button id=\"gamingBtn\">Open Gaming Center</button><button id=\"securityBtn\">Open Security Center</button><button id=\"packageBtn\">Open Package Center</button></section><pre id=\"terminal\">Aurora control surface ready.</pre></main><script>window.AURORA_CC={{name:\"{name}\",accent:\"{accent}\"}};</script><script src=\"control-center.js\"></script></body></html>"
     )
 }
 
@@ -2429,12 +3117,12 @@ fn control_center_css(accent: &str) -> String {
 }
 
 fn control_center_js() -> String {
-    "const term=document.getElementById('terminal');const write=(lines)=>term.textContent=lines.join('\\n');document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>write(['Requested mode: '+btn.dataset.mode,'CLI: sudo aurora-mode-switch '+btn.dataset.mode,'Effect: updates /etc/default/aurora-performance and triggers aurora-autosetup.'])));document.getElementById('desktopBtn').addEventListener('click',()=>write(['Desktop refresh','CLI: aurora-apply-desktop','Effect: reapplies Aurora shell defaults, favorites, wallpaper, fonts, and dock posture.']));document.getElementById('runtimeBtn').addEventListener('click',()=>write(['Runtime status','Binary: /usr/local/bin/aurora','Quick checks: aurora version | aurora detect | aurora status']));document.getElementById('tourBtn').addEventListener('click',()=>window.location='/usr/share/aurora/welcome/index.html');document.getElementById('aiBtn').addEventListener('click',()=>window.location='/usr/share/aurora/ai-hub/index.html');document.getElementById('gamingBtn').addEventListener('click',()=>window.location='/usr/share/aurora/gaming-center/index.html');document.getElementById('securityBtn').addEventListener('click',()=>window.location='/usr/share/aurora/security-center/index.html');document.getElementById('packageBtn').addEventListener('click',()=>window.location='/usr/share/aurora/package-center/index.html');".to_string()
+    "const term=document.getElementById('terminal');const write=(lines)=>term.textContent=lines.join('\\n');document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>write(['Requested mode: '+btn.dataset.mode,'CLI: sudo aurora-mode-switch '+btn.dataset.mode,'Effect: updates /etc/default/aurora-performance and triggers aurora-autosetup.'])));document.getElementById('desktopBtn').addEventListener('click',()=>write(['Desktop refresh','CLI: aurora-apply-desktop','Effect: reapplies Aurora shell defaults, favorites, wallpaper, fonts, and dock posture.']));document.getElementById('runtimeBtn').addEventListener('click',()=>write(['Runtime status','Binary: /usr/local/bin/aurora','Quick checks: aurora version | aurora detect | aurora status','AI helper: aurora-ai-helper status','GPU posture: cat /etc/aurora/gpu-profile.conf']));document.getElementById('tourBtn').addEventListener('click',()=>window.location='/usr/share/aurora/welcome/index.html');document.getElementById('aiBtn').addEventListener('click',()=>window.location='/usr/share/aurora/ai-hub/index.html');document.getElementById('gamingBtn').addEventListener('click',()=>window.location='/usr/share/aurora/gaming-center/index.html');document.getElementById('securityBtn').addEventListener('click',()=>window.location='/usr/share/aurora/security-center/index.html');document.getElementById('packageBtn').addEventListener('click',()=>window.location='/usr/share/aurora/package-center/index.html');".to_string()
 }
 
 fn ai_hub_html(name: &str, accent: &str) -> String {
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} AI Hub</title><link rel=\"stylesheet\" href=\"ai-hub.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">AI-Native Desktop</p><h1>{name} AI Hub</h1><p class=\"lede\">Private local models, desktop search integration, and GPU-aware AI tooling prepared for offline use through Ollama and Aurora wrappers.</p></section><section class=\"cards\"><article><h2>Local Models</h2><p>Ollama is treated as the default local model service. Suggested first pull: <code>ollama pull llama3</code>.</p></article><article><h2>Desktop Hooks</h2><p>Use Aurora AI Hub as the launcher for local assistance tied to files, search, and terminal workflows.</p></article><article><h2>GPU Readiness</h2><p>Driver/tooling posture is prepared for NVIDIA, AMD, and Intel acceleration through Mesa/NVIDIA-aware gaming and compute stacks.</p></article><article><h2>Rust Toolchain Surface</h2><p>Rust-native helpers like <code>ripgrep</code>, <code>fd</code>, <code>bat</code>, <code>helix</code>, <code>zellij</code>, <code>bottom</code>, and <code>just</code> are part of Aurora's developer posture when available.</p></article></section></main></body></html>"
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} AI Hub</title><link rel=\"stylesheet\" href=\"ai-hub.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">AI-Native Desktop</p><h1>{name} AI Hub</h1><p class=\"lede\">Private local models, desktop search integration, a local AI helper, and GPU-aware AI tooling prepared for offline use through Ollama and Aurora wrappers.</p></section><section class=\"cards\"><article><h2>Local Models</h2><p>Ollama is treated as the default local model service. Suggested first pull: <code>ollama pull llama3</code>.</p></article><article><h2>AI Helper</h2><p><code>aurora-ai-helper</code> gives the desktop a local chat and status surface without pushing prompts to remote services.</p></article><article><h2>GPU Readiness</h2><p>Driver/tooling posture is prepared for NVIDIA, AMD, and Intel acceleration through Mesa, CUDA, ROCm, and OpenCL-aware setup flows where available.</p></article><article><h2>Rust Toolchain Surface</h2><p>Rust-native helpers like <code>ripgrep</code>, <code>fd</code>, <code>bat</code>, <code>helix</code>, <code>zellij</code>, <code>bottom</code>, and <code>just</code> are part of Aurora's developer posture when available.</p></article></section></main></body></html>"
     )
 }
 
@@ -2458,7 +3146,7 @@ fn gaming_center_css(accent: &str) -> String {
 
 fn welcome_html(name: &str, accent: &str) -> String {
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Welcome to {name}</title><link rel=\"stylesheet\" href=\"welcome.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">Welcome To {name}</p><h1>Not just a rebrand</h1><p class=\"lede\">Aurora Neon boots with a tuned runtime, adaptive installer, local AI hub, gaming center, control center, security center, package-awareness center, richer shell defaults, repair tooling, performance profiles, and a Rust-native workstation stack intended to make the system feel opinionated from minute one.</p></section><section class=\"cards\"><article><h2>Runtime Layer</h2><p><code>aurora</code> is staged into the live system and exposed as a first-class command.</p></article><article><h2>AI-Native</h2><p>Ollama-first local model access is part of the distro feature surface rather than a browser-only story.</p></article><article><h2>Gaming Center</h2><p>Unified Wayland/gaming direction for Proton, Mesa, Gamescope, DirectStream, and low-latency posture.</p></article><article><h2>Rust-Native Tools</h2><p>Aurora tries to ship fast Rust-based search, editing, terminal, and workspace tools where the base archive makes them available.</p></article></section></main></body></html>"
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Welcome to {name}</title><link rel=\"stylesheet\" href=\"welcome.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">Welcome To {name}</p><h1>Operator-grade desktop</h1><p class=\"lede\">Aurora boots like a sci-fi workstation, not a generic Ubuntu respin. The runtime, AI hub, gaming center, creator tooling, privacy posture, repair surface, and performance profiles are meant to make the machine feel purpose-built from the first session.</p><div class=\"hero-grid\"><div><span>Gaming</span><strong>DirectStream, Proton posture, Gamescope, MangoHud, Wayland-first</strong></div><div><span>Creator</span><strong>OBS, FFmpeg, Blender, Krita, Kdenlive, low-friction export flow</strong></div><div><span>Operator</span><strong>Containers, tracing, observability, local AI, privacy, clone detection</strong></div></div></section><section class=\"cards\"><article><h2>Runtime Layer</h2><p><code>aurora</code> is staged into the live system and exposed as a first-class command surface.</p></article><article><h2>AI-Native</h2><p>Local model access and <code>aurora-ai-helper</code> are treated as first-party workflow pieces, not browser-only extras.</p></article><article><h2>Gaming Center</h2><p>Wayland, Proton, Mesa, Gamescope, DirectStream, and low-latency posture are pulled into one visible layer.</p></article><article><h2>Rust-Native Tools</h2><p>Fast search, terminal, editor, benchmarking, and workspace tools are staged where the archive provides them.</p></article></section></main></body></html>"
     )
 }
 
@@ -2476,7 +3164,7 @@ fn security_center_css(accent: &str) -> String {
 
 fn package_center_html(name: &str, accent: &str) -> String {
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} App Center</title><link rel=\"stylesheet\" href=\"package-center.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">Aurora Archive</p><h1>{name} App Center</h1><p class=\"lede\">Aurora makes package origin explicit and puts Aurora-owned packages, stacks, and curated labels ahead of raw upstream naming.</p></section><section class=\"cards\"><article><h2>Aurora Archive</h2><p>A local Aurora repository is staged into the image so curated Aurora packages and meta-packages have a distinct channel and identity.</p></article><article><h2>Aurora Labels</h2><p>User-facing tooling can present Aurora-owned labels like <code>AI Stack</code>, <code>Gaming Stack</code>, and <code>Creator Stack</code> instead of raw dependency names.</p></article><article><h2>Native DEB, Snap, Flatpak</h2><p>The App Center still distinguishes archive-backed DEBs, Snaps, and Flatpaks so users can reason about provenance.</p></article><article><h2>Selective Replacement</h2><p>Aurora can replace or augment only the packages that add real value, while still inheriting Ubuntu's mature base elsewhere.</p></article></section></main></body></html>"
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} App Center</title><link rel=\"stylesheet\" href=\"package-center.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">Aurora Archive</p><h1>{name} App Center</h1><p class=\"lede\">Aurora makes package origin explicit and puts Aurora-owned stacks, gamer tooling, creator tooling, AI helpers, and operator utilities ahead of raw upstream naming.</p></section><section class=\"cards\"><article><h2>Aurora Archive</h2><p>A local Aurora repository is staged into the image so curated Aurora packages and meta-packages have a distinct channel and identity.</p></article><article><h2>Curated Stacks</h2><p><code>Gaming</code>, <code>Creator</code>, <code>Training</code>, <code>Datacenter</code>, and <code>Privacy</code> stacks make the image feel like a platform instead of a bare package list.</p></article><article><h2>Native DEB, Snap, Flatpak</h2><p>The App Center still distinguishes archive-backed DEBs, Snaps, and Flatpaks so users can reason about provenance and trust.</p></article><article><h2>Selective Replacement</h2><p>Aurora replaces only the layers that improve UX, runtime behavior, and workflow density while preserving a stable upstream base elsewhere.</p></article></section></main></body></html>"
     )
 }
 
@@ -2488,7 +3176,19 @@ fn package_center_css(accent: &str) -> String {
 
 fn welcome_css(accent: &str) -> String {
     format!(
-        ":root{{--accent:{accent};--bg:#05070d;--panel:#0e1827;--line:#16304d;--text:#eef7ff;--muted:#9bb2c8}}*{{box-sizing:border-box}}body{{margin:0;background:linear-gradient(180deg,#091120,#05070d);color:var(--text);font-family:'Orbitron',sans-serif}}.wrap{{max-width:1100px;margin:0 auto;padding:48px 24px 72px}}.hero{{padding:36px;border:1px solid var(--line);border-radius:28px;background:rgba(11,17,28,.92)}}.eyebrow{{letter-spacing:.22em;text-transform:uppercase;color:var(--accent);font-size:12px}}h1{{margin:14px 0;font-size:64px;line-height:.95}}.lede{{max-width:780px;font-family:'Rajdhani',sans-serif;font-size:24px;color:var(--muted)}}.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-top:24px}}article{{padding:22px;border-radius:22px;background:rgba(10,18,29,.88);border:1px solid var(--line)}}article h2{{margin:0 0 8px;font-size:24px}}article p{{margin:0;font-family:'Rajdhani',sans-serif;font-size:20px;color:var(--muted)}}"
+        ":root{{--accent:{accent};--bg:#05070d;--panel:#0e1827;--line:#16304d;--text:#eef7ff;--muted:#9bb2c8}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at top,#152947 0%,#08101b 40%,#03050a 100%);color:var(--text);font-family:'Orbitron',sans-serif}}.wrap{{max-width:1180px;margin:0 auto;padding:48px 24px 72px}}.hero{{padding:40px;border:1px solid var(--line);border-radius:30px;background:linear-gradient(135deg,rgba(11,17,28,.96),rgba(3,6,10,.92));box-shadow:0 30px 120px rgba(0,0,0,.45)}}.eyebrow{{letter-spacing:.22em;text-transform:uppercase;color:var(--accent);font-size:12px}}h1{{margin:14px 0;font-size:64px;line-height:.95}}.lede{{max-width:860px;font-family:'Rajdhani',sans-serif;font-size:24px;color:var(--muted)}}.hero-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:28px}}.hero-grid div{{padding:18px;border-radius:18px;border:1px solid var(--line);background:rgba(10,18,29,.76)}}.hero-grid span{{display:block;margin-bottom:8px;color:var(--accent);text-transform:uppercase;letter-spacing:.18em;font-size:12px}}.hero-grid strong{{font-family:'Rajdhani',sans-serif;font-size:20px;line-height:1.2}}.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-top:24px}}article{{padding:22px;border-radius:22px;background:rgba(10,18,29,.88);border:1px solid var(--line)}}article h2{{margin:0 0 8px;font-size:24px}}article p{{margin:0;font-family:'Rajdhani',sans-serif;font-size:20px;color:var(--muted)}}"
+    )
+}
+
+fn andromeda_html(name: &str) -> String {
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Andromeda</title><link rel=\"stylesheet\" href=\"andromeda.css\"></head><body><main class=\"frame\"><div class=\"veil\"></div><section class=\"hero\"><p class=\"eyebrow\">{name}</p><h1>ANDROMEDA</h1><p class=\"lede\">Cinematic runtime surface loading. Gaming, creation, local AI, privacy, and operator tooling are staging now.</p><div class=\"scanline\"></div></section></main><script>setTimeout(()=>window.location='/usr/share/aurora/welcome/index.html',4200);</script></body></html>"
+    )
+}
+
+fn andromeda_css(accent: &str) -> String {
+    format!(
+        ":root{{--accent:{accent};--text:#ffffff}}*{{box-sizing:border-box}}body{{margin:0;background:#000;color:var(--text);font-family:'Orbitron',sans-serif;overflow:hidden}}.frame{{min-height:100vh;display:grid;place-items:center;position:relative;background:radial-gradient(circle at center,rgba(14,18,24,.25),#000 62%)}}.veil{{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.18) 22%,rgba(0,0,0,.55));mix-blend-mode:screen}}.hero{{position:relative;text-align:center;padding:48px 32px}}.eyebrow{{margin:0 0 18px;letter-spacing:.38em;text-transform:uppercase;font-size:14px;color:rgba(255,255,255,.72)}}h1{{margin:0;font-size:min(16vw,180px);letter-spacing:.28em;text-indent:.28em;font-weight:800;text-shadow:0 0 32px rgba(255,255,255,.15),0 0 90px rgba(255,255,255,.08)}}.lede{{max-width:720px;margin:28px auto 0;color:rgba(255,255,255,.78);font-family:'Rajdhani',sans-serif;font-size:28px}}.scanline{{width:min(720px,78vw);height:2px;margin:34px auto 0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent);box-shadow:0 0 28px rgba(255,255,255,.35),0 0 120px rgba(255,255,255,.18);animation:scan 3.2s ease-in-out infinite}}@keyframes scan{{0%,100%{{transform:scaleX(.62);opacity:.45}}50%{{transform:scaleX(1);opacity:1}}}}"
     )
 }
 
@@ -2508,7 +3208,7 @@ fn icon_theme_index() -> String {
 
 fn dconf_defaults(config: &BuildConfig) -> String {
     format!(
-        "[org/gnome/desktop/interface]\ngtk-theme='Aurora-Neon'\nicon-theme='Papirus'\ncolor-scheme='prefer-dark'\nclock-format='24h'\nfont-name='Cantarell 11'\ndocument-font-name='Cantarell 11'\nmonospace-font-name='Cascadia Code 11'\nenable-hot-corners=false\n\n[org/gnome/desktop/background]\npicture-uri='file:///usr/share/backgrounds/aurora/gaming-kali.svg'\npicture-uri-dark='file:///usr/share/backgrounds/aurora/gaming-kali.svg'\nprimary-color='#05070d'\nsecondary-color='{}'\n\n[org/gnome/desktop/wm/preferences]\nbutton-layout='appmenu:minimize,maximize,close'\nfocus-mode='click'\n\n[org/gnome/mutter]\nedge-tiling=true\noverlay-key='Super_L'\nworkspaces-only-on-primary=false\n\n[org/gnome/shell]\nfavorite-apps=['org.gnome.Nautilus.desktop','org.gnome.Terminal.desktop','alacritty.desktop','firefox_firefox.desktop','org.gnome.Software.desktop','aurora-control-center.desktop','aurora-ai-hub.desktop','aurora-gaming-center.desktop','aurora-installer.desktop']\ndisable-user-extensions=false\nenabled-extensions=['apps-menu@gnome-shell-extensions.gcampax.github.com','places-menu@gnome-shell-extensions.gcampax.github.com','user-theme@gnome-shell-extensions.gcampax.github.com']\nwelcome-dialog-last-shown-version='999999'\n\n[org/gnome/shell/keybindings]\ntoggle-application-view=['Super_L']\n\n[org/gnome/shell/extensions/dash-to-dock]\ndock-position='BOTTOM'\nextend-height=false\nshow-trash=true\nshow-mounts=true\ntransparency-mode='FIXED'\nbackground-opacity=0.25\nclick-action='minimize-or-overview'\nshow-apps-at-top=true\n\n[org/gnome/login-screen]\nlogo='/usr/share/aurora/logo.svg'\n",
+        "[org/gnome/desktop/interface]\ngtk-theme='Aurora-Neon'\nicon-theme='Papirus'\ncolor-scheme='prefer-dark'\nclock-format='24h'\nfont-name='Cantarell 11'\ndocument-font-name='Cantarell 11'\nmonospace-font-name='Cascadia Code 11'\nenable-hot-corners=false\n\n[org/gnome/desktop/background]\npicture-uri='file:///usr/share/backgrounds/aurora/gaming-kali.svg'\npicture-uri-dark='file:///usr/share/backgrounds/aurora/gaming-kali.svg'\nprimary-color='#05070d'\nsecondary-color='{}'\n\n[org/gnome/desktop/wm/preferences]\nbutton-layout='appmenu:minimize,maximize,close'\nfocus-mode='click'\n\n[org/gnome/mutter]\nedge-tiling=true\noverlay-key='Super_L'\nworkspaces-only-on-primary=false\n\n[org/gnome/shell]\nfavorite-apps=['org.gnome.Nautilus.desktop','org.gnome.Terminal.desktop','alacritty.desktop','firefox_firefox.desktop','org.gnome.Software.desktop','aurora-control-center.desktop','aurora-dev-lab.desktop','aurora-creator-studio.desktop','aurora-ai-hub.desktop','aurora-gaming-center.desktop','aurora-installer.desktop']\ndisable-user-extensions=false\nenabled-extensions=['apps-menu@gnome-shell-extensions.gcampax.github.com','places-menu@gnome-shell-extensions.gcampax.github.com','user-theme@gnome-shell-extensions.gcampax.github.com']\nwelcome-dialog-last-shown-version='999999'\n\n[org/gnome/shell/keybindings]\ntoggle-application-view=['Super_L']\n\n[org/gnome/shell/extensions/dash-to-dock]\ndock-position='BOTTOM'\nextend-height=false\nshow-trash=true\nshow-mounts=true\ntransparency-mode='FIXED'\nbackground-opacity=0.25\nclick-action='minimize-or-overview'\nshow-apps-at-top=true\n\n[org/gnome/login-screen]\nlogo='/usr/share/aurora/logo.svg'\n",
         config.accent_color
     )
 }
@@ -2565,7 +3265,7 @@ fn performance_sysctl_conf(profile: &PerformanceProfile) -> String {
 
 fn performance_defaults(profile: &PerformanceProfile) -> String {
     format!(
-        "AURORA_INSTALL_MODE={}\nAURORA_PROFILE_NAME={}\nAURORA_CPU_GOVERNOR={}\nAURORA_ENABLE_ZRAM={}\nAURORA_ZRAM_FRACTION_PERCENT={}\nAURORA_ENABLE_PRELOAD={}\nAURORA_IO_SCHEDULER={}\nAURORA_READAHEAD_KB={}\nAURORA_DISABLE_UNNEEDED_SERVICES={}\nAURORA_SWAP_POLICY={}\nAURORA_VM_SWAPPINESS={}\nAURORA_VM_DIRTY_RATIO={}\nAURORA_VM_DIRTY_BACKGROUND_RATIO={}\nAURORA_DISABLE_CPU_IDLE={}\nAURORA_SCHEDULER_TUNE={}\nAURORA_CPU_ENERGY_POLICY={}\nAURORA_ENABLE_FIREWALL=true\nAURORA_ENABLE_FAIL2BAN=true\nAURORA_ENABLE_THERMALD=true\nAURORA_ENABLE_IRQBALANCE=true\nAURORA_ENABLE_EARLYOOM=true\nAURORA_ENABLE_DIRECTSTREAM=true\n",
+        "AURORA_INSTALL_MODE={}\nAURORA_PROFILE_NAME={}\nAURORA_CPU_GOVERNOR={}\nAURORA_ENABLE_ZRAM={}\nAURORA_ZRAM_FRACTION_PERCENT={}\nAURORA_ENABLE_PRELOAD={}\nAURORA_IO_SCHEDULER={}\nAURORA_READAHEAD_KB={}\nAURORA_DISABLE_UNNEEDED_SERVICES={}\nAURORA_SWAP_POLICY={}\nAURORA_VM_SWAPPINESS={}\nAURORA_VM_DIRTY_RATIO={}\nAURORA_VM_DIRTY_BACKGROUND_RATIO={}\nAURORA_DISABLE_CPU_IDLE={}\nAURORA_SCHEDULER_TUNE={}\nAURORA_CPU_ENERGY_POLICY={}\nAURORA_ENABLE_FIREWALL=true\nAURORA_ENABLE_FAIL2BAN=true\nAURORA_ENABLE_THERMALD=true\nAURORA_ENABLE_IRQBALANCE=true\nAURORA_ENABLE_EARLYOOM=true\nAURORA_ENABLE_DIRECTSTREAM=true\nAURORA_ENABLE_DNS_OVER_TLS=true\nAURORA_ENABLE_MAC_RANDOMIZATION=true\nAURORA_ENABLE_PRIVACY_TOOLS=true\n",
         install_mode_name(&profile.mode),
         profile.name,
         profile.cpu_governor,
@@ -2586,26 +3286,54 @@ fn performance_defaults(profile: &PerformanceProfile) -> String {
 }
 
 fn autosetup_script() -> String {
-    "#!/usr/bin/env bash\nset -euo pipefail\nCONFIG=/etc/default/aurora-performance\nif [ -f \"$CONFIG\" ]; then\n  # shellcheck disable=SC1091\n  . \"$CONFIG\"\nfi\nfor cpu in /sys/devices/system/cpu/cpu[0-9]*; do\n  if [ -w \"$cpu/cpufreq/scaling_governor\" ]; then\n    printf '%s' \"${AURORA_CPU_GOVERNOR:-performance}\" > \"$cpu/cpufreq/scaling_governor\" || true\n  fi\n  if [ -w \"$cpu/cpufreq/energy_performance_preference\" ]; then\n    printf '%s' \"${AURORA_CPU_ENERGY_POLICY:-performance}\" > \"$cpu/cpufreq/energy_performance_preference\" || true\n  fi\n done\nif [ \"${AURORA_USE_TMPFS_FOR_TEMP:-true}\" = \"true\" ]; then\n  grep -q '^tmpfs /tmp tmpfs' /etc/fstab || printf 'tmpfs /tmp tmpfs defaults,noatime,mode=1777 0 0\\n' >> /etc/fstab\nfi\nif [ \"${AURORA_DISABLE_UNNEEDED_SERVICES:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  for svc in bluetooth cups apport whoopsie snapd ModemManager; do\n    systemctl disable \"$svc\" >/dev/null 2>&1 || true\n    systemctl stop \"$svc\" >/dev/null 2>&1 || true\n  done\nfi\nif [ -n \"${AURORA_READAHEAD_KB:-}\" ]; then\n  for block in /sys/block/*/queue/read_ahead_kb; do\n    [ -w \"$block\" ] && printf '%s' \"$AURORA_READAHEAD_KB\" > \"$block\" || true\n  done\nfi\nif [ -n \"${AURORA_IO_SCHEDULER:-}\" ]; then\n  for sched in /sys/block/*/queue/scheduler; do\n    [ -w \"$sched\" ] && grep -qw \"$AURORA_IO_SCHEDULER\" \"$sched\" && printf '%s' \"$AURORA_IO_SCHEDULER\" > \"$sched\" || true\n  done\nfi\nif [ \"${AURORA_DISABLE_CPU_IDLE:-false}\" = \"true\" ] && [ -w /sys/module/intel_idle/parameters/max_cstate ]; then\n  printf '1' > /sys/module/intel_idle/parameters/max_cstate || true\nfi\nif [ \"${AURORA_ENABLE_ZRAM:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable aurora-zram-setup.service >/dev/null 2>&1 || true\n  systemctl start aurora-zram-setup.service >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_IRQBALANCE:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable irqbalance >/dev/null 2>&1 || true\n  systemctl start irqbalance >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_THERMALD:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable thermald >/dev/null 2>&1 || true\n  systemctl start thermald >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_EARLYOOM:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable earlyoom >/dev/null 2>&1 || true\n  systemctl start earlyoom >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_FAIL2BAN:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable fail2ban >/dev/null 2>&1 || true\n  systemctl start fail2ban >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_FIREWALL:-true}\" = \"true\" ] && command -v ufw >/dev/null 2>&1; then\n  ufw default deny incoming >/dev/null 2>&1 || true\n  ufw default allow outgoing >/dev/null 2>&1 || true\n  ufw --force enable >/dev/null 2>&1 || true\nfi\ncommand -v systemctl >/dev/null 2>&1 && systemctl enable fstrim.timer >/dev/null 2>&1 || true\nsysctl --system >/dev/null 2>&1 || true\n".to_string()
+    "#!/usr/bin/env bash\nset -euo pipefail\nCONFIG=/etc/default/aurora-performance\nif [ -f \"$CONFIG\" ]; then\n  # shellcheck disable=SC1091\n  . \"$CONFIG\"\nfi\nfor cpu in /sys/devices/system/cpu/cpu[0-9]*; do\n  if [ -w \"$cpu/cpufreq/scaling_governor\" ]; then\n    printf '%s' \"${AURORA_CPU_GOVERNOR:-performance}\" > \"$cpu/cpufreq/scaling_governor\" || true\n  fi\n  if [ -w \"$cpu/cpufreq/energy_performance_preference\" ]; then\n    printf '%s' \"${AURORA_CPU_ENERGY_POLICY:-performance}\" > \"$cpu/cpufreq/energy_performance_preference\" || true\n  fi\n done\nif [ \"${AURORA_USE_TMPFS_FOR_TEMP:-true}\" = \"true\" ]; then\n  grep -q '^tmpfs /tmp tmpfs' /etc/fstab || printf 'tmpfs /tmp tmpfs defaults,noatime,mode=1777 0 0\\n' >> /etc/fstab\nfi\nif [ \"${AURORA_DISABLE_UNNEEDED_SERVICES:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  for svc in bluetooth cups apport whoopsie snapd ModemManager; do\n    systemctl disable \"$svc\" >/dev/null 2>&1 || true\n    systemctl stop \"$svc\" >/dev/null 2>&1 || true\n  done\nfi\nif [ -n \"${AURORA_READAHEAD_KB:-}\" ]; then\n  for block in /sys/block/*/queue/read_ahead_kb; do\n    [ -w \"$block\" ] && printf '%s' \"$AURORA_READAHEAD_KB\" > \"$block\" || true\n  done\nfi\nif [ -n \"${AURORA_IO_SCHEDULER:-}\" ]; then\n  for sched in /sys/block/*/queue/scheduler; do\n    [ -w \"$sched\" ] && grep -qw \"$AURORA_IO_SCHEDULER\" \"$sched\" && printf '%s' \"$AURORA_IO_SCHEDULER\" > \"$sched\" || true\n  done\nfi\nif [ \"${AURORA_DISABLE_CPU_IDLE:-false}\" = \"true\" ] && [ -w /sys/module/intel_idle/parameters/max_cstate ]; then\n  printf '1' > /sys/module/intel_idle/parameters/max_cstate || true\nfi\nif [ \"${AURORA_ENABLE_MAC_RANDOMIZATION:-true}\" = \"true\" ]; then\n  mkdir -p /etc/NetworkManager/conf.d\n  cat > /etc/NetworkManager/conf.d/90-aurora-privacy.conf <<'EOF'\n[device]\nwifi.scan-rand-mac-address=yes\n[connection]\nethernet.cloned-mac-address=stable\nwifi.cloned-mac-address=stable-ssid\nEOF\nfi\nif [ \"${AURORA_ENABLE_DNS_OVER_TLS:-true}\" = \"true\" ]; then\n  mkdir -p /etc/systemd/resolved.conf.d\n  cat > /etc/systemd/resolved.conf.d/90-aurora-privacy.conf <<'EOF'\n[Resolve]\nDNSOverTLS=opportunistic\nMulticastDNS=no\nLLMNR=no\nEOF\nfi\nif [ \"${AURORA_ENABLE_ZRAM:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable aurora-zram-setup.service >/dev/null 2>&1 || true\n  systemctl start aurora-zram-setup.service >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_IRQBALANCE:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable irqbalance >/dev/null 2>&1 || true\n  systemctl start irqbalance >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_THERMALD:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable thermald >/dev/null 2>&1 || true\n  systemctl start thermald >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_EARLYOOM:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable earlyoom >/dev/null 2>&1 || true\n  systemctl start earlyoom >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_FAIL2BAN:-true}\" = \"true\" ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable fail2ban >/dev/null 2>&1 || true\n  systemctl start fail2ban >/dev/null 2>&1 || true\nfi\nif [ \"${AURORA_ENABLE_FIREWALL:-true}\" = \"true\" ] && command -v ufw >/dev/null 2>&1; then\n  ufw default deny incoming >/dev/null 2>&1 || true\n  ufw default allow outgoing >/dev/null 2>&1 || true\n  ufw --force enable >/dev/null 2>&1 || true\nfi\ncommand -v systemctl >/dev/null 2>&1 && systemctl enable fstrim.timer >/dev/null 2>&1 || true\ncommand -v systemctl >/dev/null 2>&1 && systemctl restart systemd-resolved NetworkManager >/dev/null 2>&1 || true\nsysctl --system >/dev/null 2>&1 || true\n".to_string()
 }
 
 fn desktop_setup_script(config: &BuildConfig) -> String {
     format!(
-        "#!/usr/bin/env bash\nset -euo pipefail\nexport XDG_CURRENT_DESKTOP=\"${{XDG_CURRENT_DESKTOP:-GNOME}}\"\nWALL='/usr/share/backgrounds/aurora/gaming-kali.svg'\nrun_gsettings() {{\n  if command -v gsettings >/dev/null 2>&1; then\n    gsettings set \"$1\" \"$2\" \"$3\" >/dev/null 2>&1 || true\n  fi\n}}\nrun_gsettings org.gnome.desktop.interface gtk-theme 'Aurora-Neon'\nrun_gsettings org.gnome.desktop.interface icon-theme 'Papirus'\nrun_gsettings org.gnome.desktop.interface color-scheme 'prefer-dark'\nrun_gsettings org.gnome.desktop.interface monospace-font-name 'Cascadia Code 11'\nrun_gsettings org.gnome.desktop.interface enable-hot-corners false\nrun_gsettings org.gnome.desktop.background picture-uri \"file://${{WALL}}\"\nrun_gsettings org.gnome.desktop.background picture-uri-dark \"file://${{WALL}}\"\nrun_gsettings org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'\nrun_gsettings org.gnome.mutter overlay-key 'Super_L'\nrun_gsettings org.gnome.shell favorite-apps \"['org.gnome.Nautilus.desktop','org.gnome.Terminal.desktop','alacritty.desktop','firefox_firefox.desktop','org.gnome.Software.desktop','aurora-control-center.desktop','aurora-installer.desktop']\"\nrun_gsettings org.gnome.shell enabled-extensions \"['apps-menu@gnome-shell-extensions.gcampax.github.com','places-menu@gnome-shell-extensions.gcampax.github.com','user-theme@gnome-shell-extensions.gcampax.github.com']\"\nrun_gsettings org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'\nrun_gsettings org.gnome.shell.extensions.dash-to-dock extend-height false\nrun_gsettings org.gnome.shell.extensions.dash-to-dock show-trash true\nrun_gsettings org.gnome.shell.extensions.dash-to-dock show-mounts true\nrun_gsettings org.gnome.shell.extensions.dash-to-dock show-apps-at-top true\nmkdir -p \"$HOME/.config\"\ncat > \"$HOME/.config/aurora-desktop-summary\" <<'EOF'\n{name}\nMode-ready GNOME shell\nTheme: Aurora-Neon\nWallpaper: $WALL\nRuntime: /usr/local/bin/aurora\nSecurity: ufw fail2ban apparmor earlyoom thermald irqbalance\nEOF\n",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexport XDG_CURRENT_DESKTOP=\"${{XDG_CURRENT_DESKTOP:-GNOME}}\"\nWALL='/usr/share/backgrounds/aurora/gaming-kali.svg'\nrun_gsettings() {{\n  if command -v gsettings >/dev/null 2>&1; then\n    gsettings set \"$1\" \"$2\" \"$3\" >/dev/null 2>&1 || true\n  fi\n}}\nrun_gsettings org.gnome.desktop.interface gtk-theme 'Aurora-Neon'\nrun_gsettings org.gnome.desktop.interface icon-theme 'Papirus'\nrun_gsettings org.gnome.desktop.interface color-scheme 'prefer-dark'\nrun_gsettings org.gnome.desktop.interface monospace-font-name 'Cascadia Code 11'\nrun_gsettings org.gnome.desktop.interface enable-hot-corners false\nrun_gsettings org.gnome.desktop.background picture-uri \"file://${{WALL}}\"\nrun_gsettings org.gnome.desktop.background picture-uri-dark \"file://${{WALL}}\"\nrun_gsettings org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'\nrun_gsettings org.gnome.mutter overlay-key 'Super_L'\nrun_gsettings org.gnome.shell favorite-apps \"['org.gnome.Nautilus.desktop','org.gnome.Terminal.desktop','alacritty.desktop','firefox_firefox.desktop','org.gnome.Software.desktop','aurora-control-center.desktop','aurora-dev-lab.desktop','aurora-creator-studio.desktop','aurora-ai-hub.desktop','aurora-installer.desktop']\"\nrun_gsettings org.gnome.shell enabled-extensions \"['apps-menu@gnome-shell-extensions.gcampax.github.com','places-menu@gnome-shell-extensions.gcampax.github.com','user-theme@gnome-shell-extensions.gcampax.github.com']\"\nrun_gsettings org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'\nrun_gsettings org.gnome.shell.extensions.dash-to-dock extend-height false\nrun_gsettings org.gnome.shell.extensions.dash-to-dock show-trash true\nrun_gsettings org.gnome.shell.extensions.dash-to-dock show-mounts true\nrun_gsettings org.gnome.shell.extensions.dash-to-dock show-apps-at-top true\nmkdir -p \"$HOME/.config\"\ncat > \"$HOME/.config/aurora-desktop-summary\" <<'EOF'\n{name}\nMode-ready GNOME shell\nTheme: Aurora-Neon\nWallpaper: $WALL\nRuntime: /usr/local/bin/aurora\nSecurity: ufw fail2ban apparmor earlyoom thermald irqbalance\nStudios: Dev Lab + Creator Studio + AI Hub\nEOF\n",
         name = config.branding_name
     )
 }
 
 fn mode_switch_script() -> String {
-    "#!/usr/bin/env bash\nset -euo pipefail\nMODE=\"${1:-gaming}\"\nCONFIG=/etc/default/aurora-performance\ncase \"$MODE\" in\n  balanced)\n    sed -i 's/^AURORA_CPU_GOVERNOR=.*/AURORA_CPU_GOVERNOR=schedutil/' \"$CONFIG\" || true\n    sed -i 's/^AURORA_READAHEAD_KB=.*/AURORA_READAHEAD_KB=1024/' \"$CONFIG\" || true\n    sed -i 's/^AURORA_VM_SWAPPINESS=.*/AURORA_VM_SWAPPINESS=25/' \"$CONFIG\" || true\n    ;;\n  gaming)\n    sed -i 's/^AURORA_CPU_GOVERNOR=.*/AURORA_CPU_GOVERNOR=performance/' \"$CONFIG\" || true\n    sed -i 's/^AURORA_READAHEAD_KB=.*/AURORA_READAHEAD_KB=2048/' \"$CONFIG\" || true\n    sed -i 's/^AURORA_VM_SWAPPINESS=.*/AURORA_VM_SWAPPINESS=18/' \"$CONFIG\" || true\n    ;;\n  max-throughput)\n    sed -i 's/^AURORA_CPU_GOVERNOR=.*/AURORA_CPU_GOVERNOR=performance/' \"$CONFIG\" || true\n    sed -i 's/^AURORA_READAHEAD_KB=.*/AURORA_READAHEAD_KB=4096/' \"$CONFIG\" || true\n    sed -i 's/^AURORA_VM_SWAPPINESS=.*/AURORA_VM_SWAPPINESS=15/' \"$CONFIG\" || true\n    sed -i 's/^AURORA_DISABLE_CPU_IDLE=.*/AURORA_DISABLE_CPU_IDLE=true/' \"$CONFIG\" || true\n    ;;\n  *)\n    echo \"unknown mode: $MODE\" >&2\n    exit 1\n    ;;\n esac\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl restart aurora-autosetup.service >/dev/null 2>&1 || true\nfi\necho \"Aurora mode switched to $MODE\"\n".to_string()
+    "#!/usr/bin/env bash\nset -euo pipefail\nMODE=\"${1:-gaming}\"\nCONFIG=/etc/default/aurora-performance\nset_key() {\n  local key=\"$1\"\n  local value=\"$2\"\n  grep -q \"^${key}=\" \"$CONFIG\" && sed -i \"s|^${key}=.*|${key}=${value}|\" \"$CONFIG\" || printf '%s=%s\\n' \"$key\" \"$value\" >> \"$CONFIG\"\n}\ncase \"$MODE\" in\n  balanced)\n    set_key AURORA_CPU_GOVERNOR schedutil\n    set_key AURORA_READAHEAD_KB 1024\n    set_key AURORA_VM_SWAPPINESS 25\n    set_key AURORA_IO_SCHEDULER mq-deadline\n    ;;\n  gaming)\n    set_key AURORA_CPU_GOVERNOR performance\n    set_key AURORA_READAHEAD_KB 2048\n    set_key AURORA_VM_SWAPPINESS 18\n    set_key AURORA_IO_SCHEDULER none\n    ;;\n  creator)\n    set_key AURORA_CPU_GOVERNOR performance\n    set_key AURORA_READAHEAD_KB 3072\n    set_key AURORA_VM_SWAPPINESS 14\n    set_key AURORA_IO_SCHEDULER mq-deadline\n    ;;\n  training)\n    set_key AURORA_CPU_GOVERNOR performance\n    set_key AURORA_READAHEAD_KB 4096\n    set_key AURORA_VM_SWAPPINESS 10\n    set_key AURORA_IO_SCHEDULER none\n    set_key AURORA_DISABLE_CPU_IDLE true\n    ;;\n  datacenter)\n    set_key AURORA_CPU_GOVERNOR performance\n    set_key AURORA_READAHEAD_KB 1024\n    set_key AURORA_VM_SWAPPINESS 8\n    set_key AURORA_IO_SCHEDULER mq-deadline\n    set_key AURORA_DISABLE_UNNEEDED_SERVICES true\n    ;;\n  max-throughput)\n    set_key AURORA_CPU_GOVERNOR performance\n    set_key AURORA_READAHEAD_KB 4096\n    set_key AURORA_VM_SWAPPINESS 15\n    set_key AURORA_DISABLE_CPU_IDLE true\n    set_key AURORA_IO_SCHEDULER none\n    ;;\n  *)\n    echo \"unknown mode: $MODE\" >&2\n    exit 1\n    ;;\n esac\nset_key AURORA_INSTALL_MODE \"$MODE\"\nset_key AURORA_PROFILE_NAME \"$MODE\"\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl restart aurora-autosetup.service >/dev/null 2>&1 || true\nfi\necho \"Aurora mode switched to $MODE\"\n".to_string()
 }
 
 fn ai_setup_script() -> String {
-    "#!/usr/bin/env bash\nset -euo pipefail\nFIRSTBOOT=\"${1:-}\"\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl enable ollama >/dev/null 2>&1 || true\n  [ \"$FIRSTBOOT\" = \"--firstboot\" ] && systemctl start ollama >/dev/null 2>&1 || true\nfi\nmkdir -p \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/ai-hub.conf\" <<'EOF'\nprovider=ollama\ndefault_model=llama3\nsearch_integration=planned\nfile_manager_actions=planned\nEOF\nif command -v ollama >/dev/null 2>&1; then\n  echo 'Aurora AI Hub configured for Ollama. Suggested next step: ollama pull llama3'\nelse\n  echo 'Ollama not available in this image build.'\nfi\n".to_string()
+    "#!/usr/bin/env bash\nset -euo pipefail\nFIRSTBOOT=\"${1:-}\"\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl enable ollama >/dev/null 2>&1 || true\n  [ \"$FIRSTBOOT\" = \"--firstboot\" ] && systemctl start ollama >/dev/null 2>&1 || true\nfi\nmkdir -p \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/ai-hub.conf\" <<'EOF'\nprovider=ollama\ndefault_model=llama3\nsearch_integration=aurora-ai-helper\nfile_manager_actions=planned\naccelerators=auto-detect\nEOF\nif command -v ollama >/dev/null 2>&1; then\n  echo 'Aurora AI Hub configured for Ollama. Suggested next step: ollama pull llama3'\nelse\n  echo 'Ollama not available in this image build.'\nfi\n".to_string()
+}
+
+fn dev_setup_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/dev-lab.conf\" <<'EOF'\ncontainer_runtime=podman\nworkspace_shell=tmux\nbenchmark_tool=hyperfine\nrepo_acceleration=git-lfs\nEOF\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl enable libvirtd >/dev/null 2>&1 || true\n  systemctl start libvirtd >/dev/null 2>&1 || true\nfi\ncommand -v git-lfs >/dev/null 2>&1 && git lfs install >/dev/null 2>&1 || true\necho 'Aurora Dev Lab workspace applied.'\n".to_string()
+}
+
+fn creator_setup_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p \"$HOME/Videos\" \"$HOME/Pictures\" \"$HOME/Projects\" \"$HOME/.cache/aurora/preview\"\nmkdir -p \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/creator-studio.conf\" <<'EOF'\nrecording=obs-studio\nvideo_pipeline=ffmpeg\nraster_editor=gimp\nvector_editor=inkscape\nvideo_editor=kdenlive\n3d_suite=blender\noffice_suite=libreoffice\npreview_cache=$HOME/.cache/aurora/preview\nEOF\necho 'Aurora Creator Studio workspace applied.'\n".to_string()
 }
 
 fn gaming_setup_script() -> String {
     "#!/usr/bin/env bash\nset -euo pipefail\nsysctl_conf=/etc/sysctl.d/99-aurora-gaming.conf\nif [ -f \"$sysctl_conf\" ]; then\n  grep -q '^vm.max_map_count=' \"$sysctl_conf\" || printf 'vm.max_map_count=2147483642\\n' >> \"$sysctl_conf\"\n  grep -q '^fs.file-max=' \"$sysctl_conf\" || printf 'fs.file-max=2097152\\n' >> \"$sysctl_conf\"\nfi\nmkdir -p \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/gaming-center.conf\" <<'EOF'\nwayland_default=true\nnvidia_wayland=preferred\ngamescope=enabled_when_available\nmangohud=enabled_when_available\nanti_cheat_posture=steam_proton_focus\ndirectstream=enabled\nEOF\ncommand -v aurora-directstream >/dev/null 2>&1 && aurora-directstream --prime || true\nsysctl --system >/dev/null 2>&1 || true\necho 'Aurora Gaming Center profile applied.'\n".to_string()
+}
+
+fn training_setup_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p \"$HOME/.cache/aurora/datasets\" \"$HOME/.cache/aurora/checkpoints\" \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/training.conf\" <<'EOF'\ndataset_cache=$HOME/.cache/aurora/datasets\ncheckpoint_dir=$HOME/.cache/aurora/checkpoints\npython_env=venv\nnuma_policy=preferred\ngpu_orchestration=mixed-when-available\nEOF\ncommand -v python3 >/dev/null 2>&1 && python3 -m venv \"$HOME/.cache/aurora/venv\" >/dev/null 2>&1 || true\ncommand -v valkey-server >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 && systemctl enable valkey-server >/dev/null 2>&1 || true\necho 'Aurora Training profile applied.'\n".to_string()
+}
+
+fn datacenter_setup_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/datacenter.conf\" <<'EOF'\nservice_isolation=enabled\nobservability=prometheus-node-exporter\nstorage_validation=fio\nio_watch=iotop\nsched_profile=service-isolated\nEOF\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl enable prometheus-node-exporter >/dev/null 2>&1 || true\n  systemctl start prometheus-node-exporter >/dev/null 2>&1 || true\nfi\necho 'Aurora Datacenter profile applied.'\n".to_string()
+}
+
+fn gpu_setup_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nFIRSTBOOT=\"${1:-}\"\nmkdir -p /etc/aurora \"$HOME/.config/aurora\"\nGPU_VENDOR=cpu-only\nif command -v nvidia-smi >/dev/null 2>&1; then\n  GPU_VENDOR=nvidia\nelif lspci 2>/dev/null | grep -Eqi 'vga|3d|display' && lspci 2>/dev/null | grep -qi 'AMD/ATI'; then\n  GPU_VENDOR=amd\nelif lspci 2>/dev/null | grep -Eqi 'vga|3d|display' && lspci 2>/dev/null | grep -qi 'Intel'; then\n  GPU_VENDOR=intel\nfi\ncat > /etc/aurora/gpu-profile.conf <<EOF\nvendor=${GPU_VENDOR}\nmesa_vulkan=enabled_when_available\nopencl=enabled_when_available\ncuda=enabled_when_available\nrocm=enabled_when_available\nEOF\ncat > \"$HOME/.config/aurora/gpu-profile.conf\" <<EOF\nvendor=${GPU_VENDOR}\nmode=auto\nEOF\nif [ \"$GPU_VENDOR\" = nvidia ] && command -v systemctl >/dev/null 2>&1; then\n  systemctl enable nvidia-persistenced >/dev/null 2>&1 || true\n  [ \"$FIRSTBOOT\" = \"--firstboot\" ] && systemctl start nvidia-persistenced >/dev/null 2>&1 || true\nfi\necho \"Aurora GPU posture prepared for ${GPU_VENDOR}\"\n".to_string()
+}
+
+fn ai_helper_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nACTION=\"${1:-chat}\"\nshift || true\nMODEL=\"${AURORA_AI_MODEL:-llama3}\"\nPROMPT=\"${*:-}\"\ncase \"$ACTION\" in\n  status)\n    if command -v ollama >/dev/null 2>&1; then\n      echo \"Aurora AI Helper ready with Ollama model ${MODEL}\"\n    else\n      echo \"Aurora AI Helper installed but Ollama is unavailable\"\n    fi\n    ;;\n  chat)\n    if ! command -v ollama >/dev/null 2>&1; then\n      echo 'ollama not installed or not in PATH' >&2\n      exit 1\n    fi\n    if [ -z \"$PROMPT\" ]; then\n      PROMPT='Summarize this Aurora system and suggest the best workload mode.'\n    fi\n    ollama run \"$MODEL\" \"$PROMPT\"\n    ;;\n  *)\n    echo \"unknown action: $ACTION\" >&2\n    exit 1\n    ;;\n esac\n".to_string()
+}
+
+fn hardware_guard_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nACTION=\"${1:-status}\"\nSTATE_DIR=/etc/aurora\nSTATE_FILE=${STATE_DIR}/hardware.identity\nmkdir -p \"$STATE_DIR\"\nfingerprint() {\n  local machine_id product_uuid board serial\n  machine_id=$(cat /etc/machine-id 2>/dev/null || true)\n  product_uuid=$(cat /sys/class/dmi/id/product_uuid 2>/dev/null || true)\n  board=$(cat /sys/class/dmi/id/board_name 2>/dev/null || true)\n  serial=$(cat /sys/class/dmi/id/product_serial 2>/dev/null || true)\n  printf '%s|%s|%s|%s' \"$machine_id\" \"$product_uuid\" \"$board\" \"$serial\" | sha256sum | awk '{print $1}'\n}\ncurrent=$(fingerprint)\ncase \"$ACTION\" in\n  --seal|seal)\n    if [ ! -f \"$STATE_FILE\" ]; then\n      printf '%s\\n' \"$current\" > \"$STATE_FILE\"\n      echo 'Aurora hardware identity sealed.'\n    else\n      echo 'Aurora hardware identity already sealed.'\n    fi\n    ;;\n  --check|check|status)\n    if [ -f \"$STATE_FILE\" ]; then\n      sealed=$(cat \"$STATE_FILE\")\n      if [ \"$sealed\" != \"$current\" ]; then\n        echo 'warning: Aurora hardware identity mismatch detected; image may have been moved or cloned.' >&2\n        exit 2\n      fi\n      echo 'Aurora hardware identity matches this machine.'\n    else\n      echo 'Aurora hardware identity not sealed yet.'\n    fi\n    ;;\n  *)\n    echo \"unknown action: $ACTION\" >&2\n    exit 1\n    ;;\n esac\n".to_string()
 }
 
 fn directstream_defaults() -> String {
@@ -2620,6 +3348,34 @@ fn security_setup_script() -> String {
     "#!/usr/bin/env bash\nset -euo pipefail\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl enable fail2ban >/dev/null 2>&1 || true\n  systemctl enable apparmor >/dev/null 2>&1 || true\n  systemctl enable kdump-tools >/dev/null 2>&1 || true\n  [ \"${1:-}\" = \"--firstboot\" ] && systemctl start fail2ban >/dev/null 2>&1 || true\nfi\ncommand -v ufw >/dev/null 2>&1 && ufw --force enable >/dev/null 2>&1 || true\nmkdir -p \"$HOME/.config/aurora\"\ncat > \"$HOME/.config/aurora/security-center.conf\" <<'EOF'\nfirewall=enabled\nfail2ban=enabled\napparmor=enabled\nkdump=enabled_if_available\nauthd=prepared_if_available\nEOF\necho 'Aurora Security Center profile applied.'\n".to_string()
 }
 
+fn privacy_setup_script() -> String {
+    "#!/usr/bin/env bash\nset -euo pipefail\nFIRSTBOOT=\"${1:-}\"\nmkdir -p /etc/NetworkManager/conf.d /etc/systemd/resolved.conf.d \"$HOME/.config/aurora\"\ncat > /etc/NetworkManager/conf.d/90-aurora-privacy.conf <<'EOF'\n[device]\nwifi.scan-rand-mac-address=yes\n[connection]\nethernet.cloned-mac-address=stable\nwifi.cloned-mac-address=stable-ssid\nEOF\ncat > /etc/systemd/resolved.conf.d/90-aurora-privacy.conf <<'EOF'\n[Resolve]\nDNSOverTLS=opportunistic\nMulticastDNS=no\nLLMNR=no\nEOF\ncat > \"$HOME/.config/aurora/privacy.conf\" <<'EOF'\ndns_over_tls=opportunistic\nmac_randomization=enabled\ntor_tools=enabled_when_available\nusbguard=enabled_when_available\nEOF\nif command -v systemctl >/dev/null 2>&1; then\n  systemctl enable usbguard >/dev/null 2>&1 || true\n  systemctl enable tor >/dev/null 2>&1 || true\n  [ \"$FIRSTBOOT\" = \"--firstboot\" ] && systemctl start usbguard >/dev/null 2>&1 || true\n  [ \"$FIRSTBOOT\" = \"--firstboot\" ] && systemctl restart systemd-resolved NetworkManager >/dev/null 2>&1 || true\nfi\necho 'Aurora Privacy profile applied.'\n".to_string()
+}
+
+fn dev_lab_html(name: &str, accent: &str) -> String {
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} Dev Lab</title><link rel=\"stylesheet\" href=\"dev-lab.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">Aurora Engineering Surface</p><h1>{name} Dev Lab</h1><p class=\"lede\">Container-native workflows, terminal acceleration, repo hygiene tools, and virtualization support are staged directly into the distro instead of being an afterthought.</p></section><section class=\"grid\"><article><h2>Containers</h2><p>Podman, Distrobox, libvirt, and QEMU give the image a workstation-grade build and test posture.</p></article><article><h2>Shell Flow</h2><p>tmux, direnv, shellcheck, hyperfine, ripgrep, fd, and bat are included for fast local iteration.</p></article><article><h2>Repo Work</h2><p>Git LFS, benchmarking, and quality checks are part of the default Aurora stack.</p></article></section></main></body></html>"
+    )
+}
+
+fn dev_lab_css(accent: &str) -> String {
+    format!(
+        ":root{{--accent:{accent};--bg:#06101a;--panel:#0f1d2b;--line:#193550;--text:#eef7ff;--muted:#9bb3c9}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at top,#14304d,#06101a 58%);color:var(--text);font-family:'Orbitron',sans-serif}}.wrap{{max-width:1080px;margin:0 auto;padding:40px 24px 72px}}.hero{{padding:34px;border-radius:26px;border:1px solid var(--line);background:linear-gradient(135deg,rgba(14,30,46,.94),rgba(7,12,20,.96))}}.eyebrow{{text-transform:uppercase;letter-spacing:.22em;color:var(--accent);font-size:12px}}h1{{margin:12px 0 14px;font-size:58px}}.lede{{max-width:760px;color:var(--muted);font-size:22px;font-family:'Rajdhani',sans-serif}}.grid{{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}}article{{padding:22px;border-radius:22px;border:1px solid var(--line);background:rgba(10,18,29,.88)}}h2{{margin:0 0 8px}}p{{margin:0;color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:20px}}"
+    )
+}
+
+fn creator_studio_html(name: &str, accent: &str) -> String {
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{name} Creator Studio</title><link rel=\"stylesheet\" href=\"creator-studio.css\"></head><body><main class=\"wrap\"><section class=\"hero\"><p class=\"eyebrow\">Aurora Media Surface</p><h1>{name} Creator Studio</h1><p class=\"lede\">Recording, editing, graphics, office work, and production-ready defaults are layered into the image so the live ISO feels like a real workstation.</p></section><section class=\"grid\"><article><h2>Capture</h2><p>OBS Studio and FFmpeg are staged for streaming, screen recording, and quick export workflows.</p></article><article><h2>Design</h2><p>GIMP and Inkscape cover raster and vector work out of the box.</p></article><article><h2>Delivery</h2><p>LibreOffice, VLC, and Flatpak-ready distribution keep the system useful for both production and review.</p></article></section></main></body></html>"
+    )
+}
+
+fn creator_studio_css(accent: &str) -> String {
+    format!(
+        ":root{{--accent:{accent};--bg:#11060c;--panel:#24101a;--line:#4a1832;--text:#fff1f5;--muted:#d2aebb}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at top,#4a1832,#11060c 62%);color:var(--text);font-family:'Orbitron',sans-serif}}.wrap{{max-width:1080px;margin:0 auto;padding:40px 24px 72px}}.hero{{padding:34px;border-radius:26px;border:1px solid var(--line);background:linear-gradient(135deg,rgba(37,12,24,.94),rgba(14,7,11,.97))}}.eyebrow{{text-transform:uppercase;letter-spacing:.22em;color:var(--accent);font-size:12px}}h1{{margin:12px 0 14px;font-size:58px}}.lede{{max-width:760px;color:var(--muted);font-size:22px;font-family:'Rajdhani',sans-serif}}.grid{{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}}article{{padding:22px;border-radius:22px;border:1px solid var(--line);background:rgba(31,10,18,.88)}}h2{{margin:0 0 8px}}p{{margin:0;color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:20px}}"
+    )
+}
+
 fn aurora_apt_script() -> String {
     "#!/usr/bin/env bash\nset -euo pipefail\nexport APT_CONFIG=/dev/null\nif [ \"$#\" -eq 0 ]; then\n  echo 'usage: aurora-apt <apt-args>' >&2\n  exit 1\nfi\napt -o APT::Color=1 -o Dpkg::Progress-Fancy=1 \"$@\"\n".to_string()
 }
@@ -2628,13 +3384,30 @@ fn autosetup_service() -> String {
     "[Unit]\nDescription=AURORA automatic performance setup\nAfter=multi-user.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/aurora-autosetup\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\n".to_string()
 }
 
+fn aurora_inference_service() -> String {
+    "[Unit]\nDescription=AURORA local inference API\nAfter=network-online.target aurora-runtime.service ollama.service\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=/usr/local/bin/aurora api --action serve --bind 127.0.0.1:11435 --model llama3\nRestart=always\nRestartSec=2\nNice=-5\n\n[Install]\nWantedBy=multi-user.target\n".to_string()
+}
+
+fn aurora_runtime_service() -> String {
+    "[Unit]\nDescription=AURORA persistent runtime executor\nAfter=network-online.target multi-user.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=/usr/local/bin/aurora daemon --interval 5\nRestart=always\nRestartSec=2\nNice=-10\nLimitNOFILE=1048576\nTasksMax=infinity\n\n[Install]\nWantedBy=multi-user.target\n".to_string()
+}
+
 fn zram_service() -> String {
     "[Unit]\nDescription=AURORA zram memory boost\nAfter=local-fs.target\n\n[Service]\nType=oneshot\nExecStart=/bin/bash -lc 'modprobe zram || true; echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true; mem_total_kb=$(awk \"/MemTotal/ {print \\$2}\" /proc/meminfo); size_bytes=$((mem_total_kb * 1024 * 60 / 100)); echo ${size_bytes:-0} > /sys/block/zram0/disksize 2>/dev/null || true; mkswap /dev/zram0 >/dev/null 2>&1 || true; swapon -p 100 /dev/zram0 >/dev/null 2>&1 || true'\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\n".to_string()
 }
 
 fn default_wallpaper_svg(name: &str, accent: &str) -> String {
     format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1920 1080\"><defs><linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0%\" stop-color=\"#05070d\"/><stop offset=\"100%\" stop-color=\"#101f35\"/></linearGradient></defs><rect width=\"1920\" height=\"1080\" fill=\"url(#bg)\"/><circle cx=\"1510\" cy=\"190\" r=\"220\" fill=\"{accent}\" fill-opacity=\"0.18\"/><circle cx=\"260\" cy=\"880\" r=\"260\" fill=\"#ff5e00\" fill-opacity=\"0.14\"/><text x=\"120\" y=\"860\" fill=\"#eef7ff\" font-size=\"124\" font-family=\"Orbitron, sans-serif\">{name}</text><text x=\"128\" y=\"930\" fill=\"{accent}\" font-size=\"40\" font-family=\"Rajdhani, sans-serif\">Kali-inspired gaming shell for Ubuntu 24.04 remastering</text></svg>"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1920 1080\"><defs><linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0%\" stop-color=\"#030814\"/><stop offset=\"45%\" stop-color=\"#0b1630\"/><stop offset=\"100%\" stop-color=\"#02050d\"/></linearGradient><radialGradient id=\"aura\" cx=\"50%\" cy=\"45%\" r=\"46%\"><stop offset=\"0%\" stop-color=\"{accent}\" stop-opacity=\"0.8\"><animate attributeName=\"stop-opacity\" values=\"0.35;0.85;0.35\" dur=\"4.2s\" repeatCount=\"indefinite\"/></stop><stop offset=\"55%\" stop-color=\"#63d7ff\" stop-opacity=\"0.26\"/><stop offset=\"100%\" stop-color=\"#030814\" stop-opacity=\"0\"/></radialGradient><linearGradient id=\"blade\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0%\" stop-color=\"#eff9ff\"/><stop offset=\"100%\" stop-color=\"{accent}\"/></linearGradient></defs><rect width=\"1920\" height=\"1080\" fill=\"url(#bg)\"/><g opacity=\"0.9\"><circle cx=\"975\" cy=\"410\" r=\"330\" fill=\"url(#aura)\"/><path d=\"M912 268c80-48 174-36 241 22 55 48 95 123 101 202 5 75-26 160-78 215-61 64-150 104-250 100-77-4-150-34-206-88-58-56-88-128-91-209-4-102 41-188 117-242 50-36 107-53 166-51Z\" fill=\"#0a1220\" fill-opacity=\"0.9\"/><path d=\"M820 335c63-53 113-86 149-98 49-16 94-17 140-2 33 11 53 27 74 57-43-9-74-2-98 14 27 18 47 43 61 73-44-15-84-11-116 15 25 9 43 25 58 46-41-8-79-1-117 23-33 20-62 48-95 92 10-80 25-137 45-170-26 8-48 24-67 44 9-41 31-77 66-106-36 0-69 6-100 12Z\" fill=\"#d8f4ff\" fill-opacity=\"0.95\"/><path d=\"M1084 460c-36 10-67 30-95 58 44 8 88 25 132 54-66-11-125 2-173 38 66 1 123 15 172 39-73 8-133 30-184 66-42 30-82 70-121 122 28-100 38-180 29-240-28 14-48 35-67 57 7-52 36-97 80-137-37-4-68 1-105 13 55-45 112-75 172-92 60-17 112-10 160 22Z\" fill=\"#bcecff\" fill-opacity=\"0.78\"/><rect x=\"758\" y=\"474\" width=\"440\" height=\"12\" rx=\"6\" fill=\"{accent}\" opacity=\"0.8\"><animate attributeName=\"x\" values=\"758;736;758\" dur=\"3.6s\" repeatCount=\"indefinite\"/></rect><rect x=\"734\" y=\"516\" width=\"488\" height=\"8\" rx=\"4\" fill=\"#eff9ff\" opacity=\"0.7\"><animate attributeName=\"width\" values=\"420;488;420\" dur=\"2.8s\" repeatCount=\"indefinite\"/></rect><path d=\"M1188 332c84 34 146 86 186 155 26 44 39 83 44 133-35-40-71-66-111-78 18 41 24 79 18 118-23-29-48-49-80-60 0 38-9 69-24 100-18-51-48-92-92-121 19-91 35-173 59-247Z\" fill=\"#63d7ff\" fill-opacity=\"0.16\"/></g><g opacity=\"0.65\"><circle cx=\"319\" cy=\"211\" r=\"4\" fill=\"#e8fbff\"><animate attributeName=\"cy\" values=\"211;185;211\" dur=\"3.4s\" repeatCount=\"indefinite\"/></circle><circle cx=\"1547\" cy=\"182\" r=\"5\" fill=\"{accent}\"><animate attributeName=\"cy\" values=\"182;156;182\" dur=\"2.9s\" repeatCount=\"indefinite\"/></circle><circle cx=\"1630\" cy=\"742\" r=\"3\" fill=\"#e8fbff\"><animate attributeName=\"cy\" values=\"742;705;742\" dur=\"4.1s\" repeatCount=\"indefinite\"/></circle><circle cx=\"280\" cy=\"803\" r=\"4\" fill=\"{accent}\"><animate attributeName=\"cy\" values=\"803;771;803\" dur=\"3.1s\" repeatCount=\"indefinite\"/></circle></g><text x=\"110\" y=\"865\" fill=\"#eef7ff\" font-size=\"122\" font-family=\"Orbitron, sans-serif\">{name}</text><text x=\"118\" y=\"932\" fill=\"{accent}\" font-size=\"38\" font-family=\"Rajdhani, sans-serif\">Original anime-inspired acceleration shell</text></svg>"
+    )
+}
+
+fn autoinstall_yaml(config: &BuildConfig, installer: &InstallerConfig) -> String {
+    format!(
+        "#cloud-config\nautoinstall:\n  version: 1\n  locale: en_US.UTF-8\n  keyboard:\n    layout: us\n  identity:\n    hostname: aurora\n    username: aurora\n    password: \"$6$rounds=4096$aurora$replace-me-with-a-real-hash\"\n  storage:\n    layout:\n      name: direct\n  ssh:\n    install-server: true\n  packages:\n    - aurora-runtime-tools\n    - aurora-ai-hub\n    - ollama\n    - gamescope\n    - mangohud\n    - obs-studio\n  late-commands:\n    - curtin in-target --target=/target systemctl enable aurora-runtime.service\n    - curtin in-target --target=/target systemctl enable aurora-inference.service\n    - curtin in-target --target=/target systemctl enable aurora-autosetup.service\n    - curtin in-target --target=/target /usr/local/bin/aurora-mode-switch {}\n  user-data:\n    write_files:\n      - path: /etc/aurora-installer/branding.txt\n        content: |\n          {}\n      - path: /etc/aurora-installer/autoinstall-mode.txt\n        content: |\n          {}\n",
+        installer.default_mode.slug(),
+        config.branding_name,
+        installer.default_mode.slug()
     )
 }
 
@@ -2658,7 +3431,7 @@ fn plymouth_theme_metadata(theme_name: &str) -> String {
 
 fn plymouth_theme_script(name: &str, accent: &str) -> String {
     format!(
-        "Window.SetBackgroundTopColor (0.02, 0.03, 0.06);\nWindow.SetBackgroundBottomColor (0.03, 0.08, 0.15);\nlabel = Image.Text(\"{name}\", 1, 1, 1);\nlabel.SetX(Window.GetWidth() / 2 - label.GetWidth() / 2);\nlabel.SetY(Window.GetHeight() / 2 - 40);\nsub = Image.Text(\"Gaming Performance Shell\", {r}, {g}, {b});\nsub.SetX(Window.GetWidth() / 2 - sub.GetWidth() / 2);\nsub.SetY(Window.GetHeight() / 2 + 10);\n",
+        "Window.SetBackgroundTopColor (0.0, 0.0, 0.0);\nWindow.SetBackgroundBottomColor (0.02, 0.02, 0.03);\nlogo = Image.Text(\"{name}\", 1, 1, 1);\nlogo.SetX(Window.GetWidth() / 2 - logo.GetWidth() / 2);\nlogo.SetY(Window.GetHeight() / 2 - 120);\nphase = Image.Text(\"ANDROMEDA\", 1, 1, 1);\nphase.SetX(Window.GetWidth() / 2 - phase.GetWidth() / 2);\nphase.SetY(Window.GetHeight() / 2 - 34);\ntag = Image.Text(\"cinematic boot sequence\", {r}, {g}, {b});\ntag.SetX(Window.GetWidth() / 2 - tag.GetWidth() / 2);\ntag.SetY(Window.GetHeight() / 2 + 12);\npulse = Image.Text(\"[=======     ]\", {r}, {g}, {b});\npulse.SetX(Window.GetWidth() / 2 - pulse.GetWidth() / 2);\npulse.SetY(Window.GetHeight() / 2 + 56);\nstatus = Image.Text(\"Loading Aurora userspace\", 0.90, 0.94, 1.0);\nstatus.SetX(Window.GetWidth() / 2 - status.GetWidth() / 2);\nstatus.SetY(Window.GetHeight() / 2 + 96);\n",
         r = hex_channel_to_float(accent, 1),
         g = hex_channel_to_float(accent, 3),
         b = hex_channel_to_float(accent, 5),
@@ -2772,6 +3545,9 @@ fn install_mode_name(mode: &InstallMode) -> &'static str {
     match mode {
         InstallMode::Balanced => "balanced",
         InstallMode::Gaming => "gaming",
+        InstallMode::Creator => "creator",
+        InstallMode::Training => "training",
+        InstallMode::Datacenter => "datacenter",
         InstallMode::MaxThroughput => "max-throughput",
     }
 }

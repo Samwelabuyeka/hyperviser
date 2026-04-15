@@ -10,9 +10,13 @@ description = "Tensor operations for AURORA"
 
 [dependencies]
 aurora-core = { path = "../aurora-core" }
+aurora-linux = { path = "../aurora-linux" }
 
 # Math
 matrixmultiply = { workspace = true }
+rayon = { workspace = true }
+parking_lot = { workspace = true }
+wide = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }

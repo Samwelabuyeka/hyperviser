@@ -16,7 +16,10 @@ path = "src/main.rs"
 aurora-core = { path = "../aurora-core" }
 aurora-profiler = { path = "../aurora-profiler" }
 aurora-cpu = { path = "../aurora-cpu" }
+aurora-gpu = { path = "../aurora-gpu" }
+aurora-linux = { path = "../aurora-linux" }
 aurora-orchestrator = { path = "../aurora-orchestrator" }
+aurora-tensor = { path = "../aurora-tensor" }
 
 # CLI
 clap = { workspace = true }
@@ -27,6 +30,7 @@ tracing-subscriber = { workspace = true }
 
 # Async
 tokio = { workspace = true }
+rayon = { workspace = true }
 
 # Error handling
 anyhow = { workspace = true }

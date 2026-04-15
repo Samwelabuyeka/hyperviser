@@ -1,0 +1,4 @@
+target/
+distro/build/
+distro/output/
+aurora-warp-iso-release/
